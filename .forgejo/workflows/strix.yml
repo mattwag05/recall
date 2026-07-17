@@ -1,0 +1,57 @@
+name: Strix Security Scan
+
+# Agentic AI pentest via Strix, driven by a local LLM (zero cost).
+# Runs on the docker-host host-executor (Strix spawns its own sandbox container).
+# Uses the pre-built ~/strix-venv on the runner host (openai pinned to 2.26.0 for the
+# openai-agents 0.14.6 usage-schema compatibility). Exit 2 = vulns found = job fails.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [quick, deep]
+        default: quick
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 7 * * 1"   # Mon 07:00 UTC = 03:00 ET (overnight, avoids LLM-server contention)
+
+jobs:
+  strix:
+    runs-on: docker-host
+    steps:
+      - name: Guard — require LLM key
+        run: |
+          if [ -z "${{ secrets.STRIX_LLM_KEY }}" ]; then
+            echo "STRIX_LLM_KEY not set — refusing to run."; exit 1
+          fi
+
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan
+        run: |
+          MODE="${{ github.event.inputs.mode || 'quick' }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            SCOPE="--scope-mode diff --diff-base origin/${{ github.base_ref }}"
+          else
+            SCOPE=""
+          fi
+          echo "Strix $MODE scan (scope: ${SCOPE:-full}) on ${{ github.repository }}"
+          "$HOME/strix-venv/bin/strix" -n -t "$PWD" --scan-mode "$MODE" $SCOPE
+        env:
+          STRIX_LLM: ${{ vars.STRIX_LLM }}
+          LLM_API_BASE: ${{ vars.LLM_API_BASE }}
+          LLM_API_KEY: ${{ secrets.STRIX_LLM_KEY }}
+
+      - name: Alert on findings
+        if: failure()
+        run: |
+          curl -s --max-time 15 \
+            -H "Authorization: Bearer ${{ secrets.NTFY_TOKEN }}" \
+            -H "Title: Strix findings - ${{ github.repository }}" \
+            -d "Strix flagged security issues on ${{ github.ref_name }} (run ${{ github.run_number }}). Check the job log / strix_runs artifacts." \
+            ${{ vars.NTFY_URL }}

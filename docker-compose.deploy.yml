@@ -1,0 +1,52 @@
+services:
+  recall:
+    build:
+      context: .
+    container_name: recall
+    restart: unless-stopped
+    ports:
+      - "3011:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATABASE_PATH: /data/recall.db
+      DATABASE_URL: file:/data/recall.db
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_REQUEST_TIMEOUT_MS: ${LLM_REQUEST_TIMEOUT_MS:-30000}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-functiongemma:270m-it-fp16}
+      LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
+      LMSTUDIO_MODEL: ${LMSTUDIO_MODEL:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text-v2-moe:latest}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      VISION_MODEL: ${VISION_MODEL:-}
+      TRANSCRIPTION_BASE_URL: ${TRANSCRIPTION_BASE_URL:-http://sherpa-onnx:9001/v1}
+      TRANSCRIPTION_MODEL: ${TRANSCRIPTION_MODEL:-sense-voice}
+      TRANSCRIPTION_API_KEY: ${TRANSCRIPTION_API_KEY:-}
+      TRANSCRIPTION_MAX_AUDIO_MB: ${TRANSCRIPTION_MAX_AUDIO_MB:-100}
+      TTS_BASE_URL: ${TTS_BASE_URL:-http://host.docker.internal:8880/v1}
+      TTS_MODEL: ${TTS_MODEL:-kokoro}
+      TTS_VOICE: ${TTS_VOICE:-af_heart}
+      OMLX_BASE_URL: ${OMLX_BASE_URL:-}
+      OMLX_API_KEY: ${OMLX_API_KEY:-}
+      OMLX_MODEL: ${OMLX_MODEL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - sherpa_onnx
+    volumes:
+      - /mnt/storage/appdata/recall/data:/data
+      - /mnt/storage/appdata/recall/media:/app/public/media
+
+networks:
+  sherpa_onnx:
+    external: true
+    name: sherpa-onnx_default

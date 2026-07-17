@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// A "Card" in the Recall UI. Kept as `Bookmark` internally so the forked SBT
+// engine + API routes keep working; the Reading Room frontend presents it as a Card.
+model Bookmark {
+  id             String    @id @default(cuid())
+  postId         String?   @unique
+  platform       String    // "web", "threads", "instagram", "reddit", "github"
+  title          String?   // editable card title (Recall)
+  provider       String?   // display source/provider, e.g. "nytimes.com", "youtube" (Recall)
+  thumbnail      String?   // optional preview image url (Recall)
+  text           String    // short description / OG description / excerpt
+  postUrl        String    @default("")
+  authorHandle   String?
+  authorName     String?
+  postCreatedAt  DateTime?
+  importedAt     DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  rawJson        String?
+  semanticTags   String?   // JSON array (flat tags, complements hierarchical Category)
+  entities       String?   // JSON object
+  actionability  String?   // inspiration / try_this / build_this / reference
+  enrichedAt     DateTime?
+  enrichmentMeta String?
+  saveAction     String    @default("saved")
+  body           String?   // = Recall "readerContent": full extracted article/transcript text
+  summary        String?   // short 1-2 sentence summary
+  notebookContent String?  // = Recall "Notebook": editable rich AI summary (markdown), survives regen
+  sourceType     String    @default("social") // "social", "url", "wiki", "pasted", "document", "image", "media"
+  status         String    @default("ready")  // organizing | summarizing | ready | failed
+  shared         Boolean   @default(false)
+  shareId        String?   @unique
+  embedding      Bytes?    // float32 vector for semantic search (Phase 2)
+  notes          String?
+  mediaItems     MediaItem[]
+  categories     BookmarkCategory[]
+  connectionsOut Connection[] @relation("ConnFrom")
+  connectionsIn  Connection[] @relation("ConnTo")
+  quizQuestions  QuizQuestion[]
+}
+
+model MediaItem {
+  id           String   @id @default(cuid())
+  bookmarkId   String
+  bookmark     Bookmark @relation(fields: [bookmarkId], references: [id], onDelete: Cascade)
+  type         String   // image / video / carousel
+  url          String
+  thumbnailUrl String?
+  localPath    String?
+  imageTags    String?
+}
+
+// A "Tag" in the Recall UI: hierarchical via parentId self-relation.
+model Category {
+  id            String             @id @default(cuid())
+  name          String             @unique
+  slug          String             @unique
+  color         String
+  description   String?
+  isAiGenerated Boolean            @default(false)
+  parentId      String?
+  parent        Category?          @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children      Category[]         @relation("CategoryTree")
+  bookmarks     BookmarkCategory[]
+}
+
+model BookmarkCategory {
+  bookmarkId  String
+  categoryId  String
+  bookmark    Bookmark @relation(fields: [bookmarkId], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  confidence  Float
+  @@id([bookmarkId, categoryId])
+}
+
+// Typed relationship between cards / extracted entities (Phase 2 Connections + Graph).
+model Connection {
+  id          String    @id @default(cuid())
+  fromId      String
+  from        Bookmark  @relation("ConnFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId        String?
+  to          Bookmark? @relation("ConnTo", fields: [toId], references: [id], onDelete: Cascade)
+  entityType  String    @default("Card") // Corporation, Software, Book, Event, Product, Card...
+  label       String
+  origin      String    @default("ai")   // ai | manual
+  createdAt   DateTime  @default(now())
+  @@index([fromId])
+  @@index([toId])
+}
+
+// Active-recall question attached to a card (Phase 3 Quiz + Spaced Repetition).
+model QuizQuestion {
+  id            String    @id @default(cuid())
+  bookmarkId    String
+  bookmark      Bookmark  @relation(fields: [bookmarkId], references: [id], onDelete: Cascade)
+  prompt        String
+  answer        String
+  type          String    @default("short") // mcq | short | timed | matching
+  options       String?   // JSON for mcq
+  origin        String    @default("ai")     // ai | manual
+  // spaced-repetition scheduling
+  memoryStage   String    @default("new")    // new | learning | practiced | confident | mastered
+  ease          Float     @default(2.5)
+  intervalDays  Int       @default(0)
+  dueAt         DateTime?
+  lastReviewed  DateTime?
+  timesSeen     Int       @default(0)
+  timesCorrect  Int       @default(0)
+  createdAt     DateTime  @default(now())
+  @@index([bookmarkId])
+  @@index([dueAt])
+}
+
+// One row per answered review event — powers honest streaks + activity history
+// (QuizQuestion.lastReviewed only keeps the most recent review per question).
+model ReviewLog {
+  id          String   @id @default(cuid())
+  questionId  String
+  bookmarkId  String
+  correct     Boolean
+  reviewedAt  DateTime @default(now())
+  @@index([reviewedAt])
+}
+
+// Chat conversation over selected knowledge context (Phase 2 Chat).
+model ChatThread {
+  id          String        @id @default(cuid())
+  title       String?
+  scope       String        @default("global") // global | card | tag
+  scopeRefs   String?       // JSON: { cardIds: [], tagSlugs: [] }
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  messages    ChatMessage[]
+}
+
+model ChatMessage {
+  id        String     @id @default(cuid())
+  threadId  String
+  thread    ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role      String     // user | assistant
+  content   String
+  citations String?    // JSON: [{ cardId, title }]
+  createdAt DateTime   @default(now())
+  @@index([threadId])
+}
+
+model ImportJob {
+  id             String   @id @default(cuid())
+  filename       String
+  platform       String
+  status         String   @default("pending")
+  totalCount     Int      @default(0)
+  processedCount Int      @default(0)
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+model TriageRule {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  conditions  String
+  action      String
+  priority    Int      @default(0)
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

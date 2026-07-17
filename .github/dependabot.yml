@@ -1,0 +1,47 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    groups:
+      production-deps:
+        dependency-type: "production"
+        update-types:
+          - "patch"
+          - "minor"
+      dev-deps:
+        dependency-type: "development"
+        update-types:
+          - "patch"
+          - "minor"
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+      include: "scope"
+
+  - package-ecosystem: "npm"
+    directory: "/mcp-server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    groups:
+      production-deps:
+        dependency-type: "production"
+        update-types:
+          - "patch"
+          - "minor"
+      dev-deps:
+        dependency-type: "development"
+        update-types:
+          - "patch"
+          - "minor"
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+      include: "scope"

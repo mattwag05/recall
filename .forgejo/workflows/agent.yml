@@ -1,0 +1,48 @@
+name: agent
+# Label-driven background coding agent. A human applies an `agent:*` label to an
+# issue; this fires, runs the pi agent against a local LLM server (zero API cost),
+# and transitions the issue. Every human handoff is a LABEL application (the only
+# Forgejo Actions issue-trigger we rely on) — no dependence on issue_comment events.
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [closed]
+
+jobs:
+  agent:
+    # React only to our own labels, or to a merged agent PR (to flip the issue to done).
+    if: >-
+      (github.event_name == 'issues' && startsWith(github.event.label.name, 'agent:')) ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    # Host executor (NOT a container) — same runner Strix uses. Reaches the local LLM server directly.
+    runs-on: docker-host
+    steps:
+      # Fully-qualified — this Forgejo requires it.
+      # `issues` events carry no code ref, so pin checkout to the default branch,
+      # else the workspace ($PWD, where pi runs) is empty and there's nothing to edit.
+      - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+      - name: run agent driver
+        env:
+          # Forgejo API write token (issue+PR scope). Stored as user secret FJ_API_TOKEN
+          # (Forgejo reserves the FORGEJO_ prefix for secret names).
+          FORGEJO_TOKEN: ${{ secrets.FJ_API_TOKEN }}
+          # Reuse Strix's existing local-LLM credentials — do NOT add new ones.
+          LLM_KEY:  ${{ secrets.STRIX_LLM_KEY }}
+          LLM_BASE: ${{ vars.LLM_API_BASE }}
+          # Absolute path to the globally-installed pi binary on the runner host (resolved at install time).
+          PI_BIN: ${{ vars.PI_BIN }}
+          # Forgejo API base reachable from the runner host.
+          FORGEJO_API: ${{ vars.FJ_API_BASE }}
+          # git-SSH push path to this Forgejo instance.
+          GIT_SSH_HOST: ${{ vars.GIT_SSH_HOST }}
+          GIT_SSH_PORT: "3022"
+          # SSH signing key (private, passphrase-less). Its public half is registered on the
+          # GitHub account as a *signing* key, so agent commits show Verified once mirrored.
+          # Distinct from the other keys — this one lives where agent-authored code
+          # runs, so it must be revocable on its own. Unset => agent still works, unsigned.
+          AGENT_SIGNING_KEY: ${{ secrets.AGENT_SIGNING_KEY }}
+        run: bash .forgejo/agent/driver.sh
