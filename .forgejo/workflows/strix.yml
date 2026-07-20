@@ -32,7 +32,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Reset LLM engine (fresh memory headroom)
+        run: |
+          MODEL="${{ vars.STRIX_LLM }}"; MODEL="${MODEL#openai/}"
+          curl -s --max-time 30 -X POST \
+            -H "Authorization: Bearer ${{ secrets.STRIX_LLM_KEY }}" \
+            "${{ vars.LLM_API_BASE }}/models/$MODEL/unload" >/dev/null || true
+
       - name: Scan
+        id: scan
         run: |
           MODE="${{ github.event.inputs.mode || 'quick' }}"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -41,17 +49,38 @@ jobs:
             SCOPE=""
           fi
           echo "Strix $MODE scan (scope: ${SCOPE:-full}) on ${{ github.repository }}"
+          set +e
           "$HOME/strix-venv/bin/strix" -n -t "$PWD" --scan-mode "$MODE" $SCOPE
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
         env:
           STRIX_LLM: ${{ vars.STRIX_LLM }}
           LLM_API_BASE: ${{ vars.LLM_API_BASE }}
           LLM_API_KEY: ${{ secrets.STRIX_LLM_KEY }}
 
+      - name: Free LLM engine after scan
+        if: always()
+        run: |
+          MODEL="${{ vars.STRIX_LLM }}"; MODEL="${MODEL#openai/}"
+          curl -s --max-time 30 -X POST \
+            -H "Authorization: Bearer ${{ secrets.STRIX_LLM_KEY }}" \
+            "${{ vars.LLM_API_BASE }}/models/$MODEL/unload" >/dev/null || true
+
       - name: Alert on findings
-        if: failure()
+        if: failure() && steps.scan.outputs.rc == '2'
         run: |
           curl -s --max-time 15 \
             -H "Authorization: Bearer ${{ secrets.NTFY_TOKEN }}" \
             -H "Title: Strix findings - ${{ github.repository }}" \
             -d "Strix flagged security issues on ${{ github.ref_name }} (run ${{ github.run_number }}). Check the job log / strix_runs artifacts." \
+            ${{ vars.NTFY_URL }}
+
+      - name: Alert on scan crash
+        if: failure() && steps.scan.outputs.rc != '2'
+        run: |
+          curl -s --max-time 15 \
+            -H "Authorization: Bearer ${{ secrets.NTFY_TOKEN }}" \
+            -H "Title: Strix crashed - ${{ github.repository }}" \
+            -d "Strix scan CRASHED on ${{ github.ref_name }} (run ${{ github.run_number }}, rc=${{ steps.scan.outputs.rc }}) — infra/LLM-server error, NOT findings. Check the job log." \
             ${{ vars.NTFY_URL }}
