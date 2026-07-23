@@ -10,7 +10,8 @@
     "prisma": "prisma",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test": "tsx scripts/check-xss-sanitization.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -25,6 +26,7 @@
     "@xyflow/react": "^12.10.1",
     "better-sqlite3": "^12.9.0",
     "class-variance-authority": "^0.7.1",
+    "dompurify": "^3.4.12",
     "dotenv": "^17.4.2",
     "framer-motion": "^12.35.2",
     "jsdom": "^29.1.1",

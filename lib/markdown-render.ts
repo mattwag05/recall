@@ -2,6 +2,49 @@
 // Handles: ## / ### headings, - bullets, **bold**, *italic*, links,
 // blockquotes, and paragraphs. Input is escaped first, so it's safe for our own
 // LLM output.
+//
+// Defense-in-depth: HTML output is then passed through DOMPurify with an
+// explicit allowlist so any attacker-injected `<script>`, event handlers,
+// or `javascript:` URLs are stripped before reaching the browser.
+
+import DOMPurify from "dompurify"
+
+const PURIFY_CONFIG = {
+  ALLOWED_TAGS: ["p", "h1", "h2", "h3", "strong", "em", "code", "a", "ul", "li", "blockquote", "br"],
+  ALLOWED_ATTR: ["href", "target", "rel", "id"],
+}
+
+let _purify: {
+  sanitize(html: string, opts?: Record<string, unknown>): string
+  removed: string[]
+  isSupported: boolean
+  setConfig(opts: Record<string, unknown>): void
+  clearConfig(): void
+  isValidAttribute(attrName: string, value: string): boolean
+  addHook(hookType: string, callback: (el: unknown, data: Record<string, unknown>, config: Record<string, unknown>) => void): void
+  removeHook(hookType: string): void
+  removeHooks(types: string[]): void
+  removeAllHooks(): void
+  version: string
+} | null = null
+
+function getPurify() {
+  if (_purify) return _purify
+  if (typeof window !== "undefined") {
+    _purify = DOMPurify(window)
+  } else {
+    const { JSDOM } = require("jsdom")
+    _purify = DOMPurify(new JSDOM("").window)
+  }
+  return _purify
+}
+
+function sanitizeHtml(html: string): string {
+  return getPurify().sanitize(html, {
+    ADD_TAGS: PURIFY_CONFIG.ALLOWED_TAGS,
+    ADD_ATTR: PURIFY_CONFIG.ALLOWED_ATTR,
+  })
+}
 
 function escapeHtml(s: string): string {
   return s
@@ -124,15 +167,16 @@ export function renderMarkdown(md: string): string {
     para.push(line.trim())
   }
   flushPara(); closeList()
-  return out.join('\n')
+  return sanitizeHtml(out.join('\n'))
 }
 
 /** Plain text → paragraphs for the Reader view. */
 export function renderReader(text: string): string {
-  return text
+  const html = text
     .split(/\n{2,}/)
     .map(p => p.trim())
     .filter(Boolean)
     .map(p => `<p>${p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')}</p>`)
     .join('\n')
+  return sanitizeHtml(html)
 }
