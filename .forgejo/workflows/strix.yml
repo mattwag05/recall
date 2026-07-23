@@ -55,10 +55,29 @@ jobs:
           fi
           echo "Strix $MODE scan (scope: ${SCOPE:-full}) on ${{ github.repository }}"
           set +e
-          "$HOME/strix-venv/bin/strix" -n -t "$PWD" --scan-mode "$MODE" $SCOPE
-          rc=$?
+          "$HOME/strix-venv/bin/strix" -n -t "$PWD" --scan-mode "$MODE" $SCOPE 2>&1 | tee strix-output.txt
+          rc=${PIPESTATUS[0]}
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
-          exit "$rc"
+          # Strix exits 2 on ANY finding, and the local model has a real
+          # false-positive rate on nuanced diffs -- a bogus LOW would keep the
+          # branch red indefinitely and the red-main watcher would re-flag it
+          # forever. Fail only on HIGH/CRITICAL; LOW/MEDIUM are advisory.
+          # 2026-07-23, ROADMAP item 11.
+          if [ "$rc" != "2" ]; then exit "$rc"; fi
+          # "Vulnerabilities" also appears in the report prose -- the summary
+          # panel is the LAST line carrying a severity token.
+          LINE=$(sed 's/\x1b\[[0-9;]*m//g' strix-output.txt | grep -E 'Vulnerabilities +[A-Z]+:' | tail -1)
+          SEV=$(echo "$LINE" | grep -oE '(CRITICAL|HIGH|MEDIUM|LOW): *[0-9]+' | tr '\n' ' ')
+          echo "severity=$SEV" >> "$GITHUB_OUTPUT"
+          echo "Strix severity summary: ${SEV:-<unparsed>}"
+          if [ -z "$SEV" ]; then
+            echo "::error::Could not parse the Strix severity summary -- failing closed."; exit 2
+          fi
+          case "$SEV" in
+            *CRITICAL:*|*HIGH:*) exit 2 ;;
+          esac
+          echo "::warning::Strix findings are LOW/MEDIUM only ($SEV) -- advisory, not failing the job."
+          exit 0
         env:
           STRIX_LLM: ${{ vars.STRIX_LLM }}
           LLM_API_BASE: ${{ vars.LLM_API_BASE }}
@@ -89,3 +108,13 @@ jobs:
             -H "Title: Strix crashed - ${{ github.repository }}" \
             -d "Strix scan CRASHED on ${{ github.ref_name }} (run ${{ github.run_number }}, rc=${{ steps.scan.outputs.rc }}) — infra/LLM-server error, NOT findings. Check the job log." \
             ${{ vars.NTFY_URL }}
+
+      - name: Advisory PR comment on LOW/MEDIUM findings
+        if: success() && steps.scan.outputs.rc == '2' && github.event_name == 'pull_request'
+        run: |
+          printf '%s' '{"body": "\u26a0\ufe0f **Strix advisory** \u2014 findings below the HIGH threshold, so this scan is not blocking the PR.\n\nSeverity: `${{ steps.scan.outputs.severity }}`\n\nFull report is in the job log for run ${{ github.run_number }}. Triage before merge; the local model has a known false-positive rate at LOW/MEDIUM."}' > strix-comment.json
+          curl -s --max-time 20 -X POST \
+            -H "Authorization: token ${{ secrets.FJ_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data-binary @strix-comment.json \
+            "${{ vars.FJ_API_BASE }}/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" >/dev/null
