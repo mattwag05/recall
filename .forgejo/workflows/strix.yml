@@ -15,11 +15,16 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "0 7 * * 1"   # Mon 07:00 UTC = 03:00 ET (overnight, avoids LLM-server contention)
+    - cron: "30 8 * * 1"   # Mon 08:30 UTC = 04:30 ET (staggered: 2nd of 3, after agentic-crm)
 
 jobs:
   strix:
     runs-on: docker-host
+    # was unbounded -> a hung scan burned the runner's 3h ceiling (Tutor
+    # 2026-07-20). Kills a hang ~2h sooner; on timeout the run is 'cancelled'
+    # and skips the alert steps below, so the pironman red-main watcher is the
+    # backstop alert for that case. 2026-07-23.
+    timeout-minutes: 90
     steps:
       - name: Guard — require LLM key
         run: |
