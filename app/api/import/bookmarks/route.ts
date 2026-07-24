@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { generateLegacyPostIdFromUrl, generatePostIdFromUrl } from '@/lib/url-capture'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
       } catch (err) {
         failures.push({
           name: bookmark.title,
-          error: err instanceof Error ? err.message : `Could not import ${bookmark.title}.`,
+          error: err instanceof BookmarkImportError ? err.message : `Could not import ${bookmark.title}.`,
           status: err instanceof BookmarkImportError ? err.status : 500,
         })
       }
@@ -184,7 +185,7 @@ export async function POST(request: Request) {
       failed: failures.length,
     })
   } catch (err) {
-    return NextResponse.json({ error: `Browser bookmarks import failed: ${String(err)}` }, { status: 500 })
+    return apiError('Browser bookmarks import failed', err, 500)
   }
 }
 

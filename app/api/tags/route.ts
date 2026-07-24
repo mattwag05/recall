@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -81,6 +82,6 @@ export async function GET() {
 
     return NextResponse.json({ tags: roots.map(toPublicNode) })
   } catch (err) {
-    return NextResponse.json({ error: `Could not load tags: ${String(err)}` }, { status: 500 })
+    return apiError('Could not load tags', err, 500)
   }
 }

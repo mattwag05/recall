@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { extractImageTextForChat, chatImageMimeType, ImageVisionError, MAX_CHAT_IMAGE_BYTES } from '@/lib/image-vision'
 import { extractPdfTextForChat, MAX_CHAT_PDF_BYTES, PdfTextExtractionError } from '@/lib/pdf-text'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     if (err instanceof PdfTextExtractionError || err instanceof ImageVisionError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json({ error: `Attachment extraction failed: ${String(err)}` }, { status: 500 })
+    return apiError('Attachment extraction failed', err, 500)
   }
 }
 

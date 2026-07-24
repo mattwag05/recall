@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { captureUrl, generateLegacyPostIdFromUrl, generatePostIdFromUrl } from '@/lib/url-capture'
+import { apiError } from '@/lib/api-errors'
 
 // jsdom needs the Node runtime (not edge).
 export const runtime = 'nodejs'
@@ -138,6 +139,6 @@ export async function POST(request: Request) {
       message: capture.message,
     })
   } catch (err) {
-    return NextResponse.json({ error: `Could not import URL: ${String(err)}` }, { status: 500 })
+    return apiError('Could not import URL', err, 500)
   }
 }

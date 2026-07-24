@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -52,6 +53,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: card.id, title: derivedTitle, status: card.status })
   } catch (err) {
-    return NextResponse.json({ error: `Could not create note card: ${String(err)}` }, { status: 500 })
+    return apiError('Could not create note card', err, 500)
   }
 }

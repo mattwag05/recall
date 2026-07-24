@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { categoryFilterExists, exportMarkdown, type ExportFilters } from '@/lib/exporter'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -25,6 +26,6 @@ export async function GET(request: Request) {
       },
     })
   } catch (err) {
-    return NextResponse.json({ error: `Markdown export failed: ${String(err)}` }, { status: 500 })
+    return apiError('Markdown export failed', err, 500)
   }
 }

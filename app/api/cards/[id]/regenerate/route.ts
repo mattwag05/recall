@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { generateNotebook, extractTldr } from '@/lib/notebook'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -63,9 +64,9 @@ export async function POST(request: Request, { params }: Ctx) {
       return NextResponse.json({ ok: true, notebookContent, summary: tldr || undefined })
     } catch (err) {
       await prisma.bookmark.update({ where: { id }, data: { status: b.status } }).catch(() => {})
-      return NextResponse.json({ error: `Could not regenerate notebook: ${String(err)}` }, { status: 502 })
+      return apiError('Could not regenerate notebook', err, 502)
     }
   } catch (err) {
-    return NextResponse.json({ error: `Could not regenerate notebook: ${String(err)}` }, { status: 500 })
+    return apiError('Could not regenerate notebook', err, 500)
   }
 }

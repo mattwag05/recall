@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { CardGraphError, getCardGraph } from '@/lib/connection-graph'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -17,6 +18,6 @@ export async function GET(request: Request, { params }: Ctx) {
     if (err instanceof CardGraphError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json({ error: `Could not load card graph: ${String(err)}` }, { status: 500 })
+    return apiError('Could not load card graph', err, 500)
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { categoryFilterExists, exportCsv, exportJson, exportZip, ExportFilters } from '@/lib/exporter'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -64,6 +65,6 @@ export async function GET(request: Request): Promise<Response> {
       },
     })
   } catch (err) {
-    return NextResponse.json({ error: `${format.toUpperCase()} export failed: ${String(err)}` }, { status: 500 })
+    return apiError(`${format.toUpperCase()} export failed`, err, 500)
   }
 }

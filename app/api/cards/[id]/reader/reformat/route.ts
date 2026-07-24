@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { llmChat } from '@/lib/ai-client'
 import { getPrisma } from '@/lib/db'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -50,10 +51,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       truncated: readerText.length > MAX_REFORMAT_INPUT_CHARS,
     })
   } catch (err) {
-    return NextResponse.json(
-      { error: `Could not reformat Reader text: ${String(err)}` },
-      { status: 503 },
-    )
+    return apiError('Could not reformat Reader text', err, 503)
   }
 }
 

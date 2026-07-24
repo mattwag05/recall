@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ChatRagError, getChatThread, runKnowledgeChat } from '@/lib/chat-rag'
 import type { ChatAttachment } from '@/lib/recall-types'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -43,10 +44,7 @@ export async function POST(request: Request) {
     if (err instanceof ChatRagError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json(
-      { error: `Could not answer from local knowledge: ${String(err)}` },
-      { status: 503 },
-    )
+    return apiError('Could not answer from local knowledge', err, 503)
   }
 }
 

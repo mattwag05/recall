@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { summaryForSpeech, synthesizeSpeech, TtsError } from '@/lib/tts'
 import { isAllowedVoice } from '@/lib/tts-preferences'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -34,6 +35,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (err instanceof TtsError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json({ error: `Could not synthesize audio: ${String(err)}` }, { status: 500 })
+    return apiError('Could not synthesize audio', err, 500)
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createManualQuizQuestion, QuizQuestionError } from '@/lib/quiz-actions'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -21,6 +22,6 @@ export async function POST(request: Request, { params }: Ctx) {
     if (err instanceof QuizQuestionError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json({ error: `Could not create quiz question: ${String(err)}` }, { status: 500 })
+    return apiError('Could not create quiz question', err, 500)
   }
 }

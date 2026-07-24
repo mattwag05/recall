@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { captureWikipediaTopic, searchWikipediaTopics } from '@/lib/wiki-capture'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
     const results = await searchWikipediaTopics(query, 6)
     return NextResponse.json({ ok: true, results })
   } catch (err) {
-    return NextResponse.json({ error: `Could not search Wikipedia: ${String(err)}` }, { status: 502 })
+    return apiError('Could not search Wikipedia', err, 502)
   }
 }
 
@@ -94,6 +95,6 @@ export async function POST(request: Request) {
       message: 'Wikipedia topic imported. Summarizing on your local model...',
     })
   } catch (err) {
-    return NextResponse.json({ error: `Could not import Wikipedia topic: ${String(err)}` }, { status: 502 })
+    return apiError('Could not import Wikipedia topic', err, 502)
   }
 }

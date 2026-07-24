@@ -4,6 +4,7 @@ import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { extractImageTextForImport, ImageVisionError, MAX_IMPORT_IMAGE_BYTES, savedImageMimeType } from '@/lib/image-vision'
 import { extensionForImageMime, mediaLocalPath, saveMediaFile } from '@/lib/media-storage'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
           truncated = extracted.truncated
         } catch (err) {
           status = 'failed'
-          visionError = err instanceof Error ? err.message : `Could not extract OCR/vision text from ${name}.`
+          visionError = err instanceof ImageVisionError ? err.message : `Could not extract OCR/vision text from ${name}.`
         }
 
         const mediaId = `image_${hash.slice(0, 32)}`
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
       } catch (err) {
         failures.push({
           name,
-          error: err instanceof Error ? err.message : `Could not import ${name}.`,
+          error: err instanceof ImageVisionError ? err.message : `Could not import ${name}.`,
           status: err instanceof ImageVisionError ? err.status : 500,
         })
       }
@@ -176,7 +177,7 @@ export async function POST(request: Request) {
       failed: failures.length,
     })
   } catch (err) {
-    return NextResponse.json({ error: `Image import failed: ${String(err)}` }, { status: 500 })
+    return apiError('Image import failed', err, 500)
   }
 }
 

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { generatePostIdFromUrl } from '@/lib/url-capture'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -230,7 +231,7 @@ export async function POST(request: Request) {
       } catch (err) {
         failures.push({
           name: label,
-          error: err instanceof Error ? err.message : String(err),
+          error: err instanceof SocialBookmarksImportError ? err.message : `Could not import ${label}.`,
           status: err instanceof SocialBookmarksImportError ? err.status : 500,
         })
       }
@@ -238,7 +239,7 @@ export async function POST(request: Request) {
   } catch (err) {
     const failure = {
       name: file.name || 'Social Bookmarks JSON',
-      error: err instanceof Error ? err.message : String(err),
+      error: err instanceof SocialBookmarksImportError ? err.message : 'Could not import Social Bookmarks.',
       status: err instanceof SocialBookmarksImportError ? err.status : 400,
     }
     return NextResponse.json({ error: failure.error, failures: [failure] }, { status: failure.status })

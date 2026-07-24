@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { synthesizeSpeech, TtsError } from '@/lib/tts'
 import { isAllowedVoice } from '@/lib/tts-preferences'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -20,6 +21,6 @@ export async function POST(request: Request) {
     })
   } catch (err) {
     if (err instanceof TtsError) return NextResponse.json({ error: err.message }, { status: err.status })
-    return NextResponse.json({ error: `Could not synthesize sample audio: ${String(err)}` }, { status: 500 })
+    return apiError('Could not synthesize sample audio', err, 500)
   }
 }

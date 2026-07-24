@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { generateLegacyPostIdFromUrl, generatePostIdFromUrl } from '@/lib/url-capture'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
       } catch (err) {
         failures.push({
           name: item.title,
-          error: err instanceof Error ? err.message : `Could not import ${item.title}.`,
+          error: err instanceof PocketImportError ? err.message : `Could not import ${item.title}.`,
           status: err instanceof PocketImportError ? err.status : 500,
         })
       }
@@ -184,7 +185,7 @@ export async function POST(request: Request) {
       failed: failures.length,
     })
   } catch (err) {
-    return NextResponse.json({ error: `Pocket import failed: ${String(err)}` }, { status: 500 })
+    return apiError('Pocket import failed', err, 500)
   }
 }
 
