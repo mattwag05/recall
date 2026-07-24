@@ -5,6 +5,7 @@ import { generateNotebook, extractTldr } from '@/lib/notebook'
 import { tagBookmarks } from '@/lib/semantic-tagger'
 import { classifyBookmarks } from '@/lib/categorizer'
 import { captureUrl } from '@/lib/url-capture'
+import { apiErrorOk } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -126,9 +127,9 @@ export async function POST(_req: Request, { params }: Ctx) {
       return NextResponse.json({ ok: true, categories: classification?.categories.length ?? 0 })
     } catch (err) {
       await prisma.bookmark.update({ where: { id }, data: { status: 'failed' } }).catch(() => {})
-      return NextResponse.json({ ok: false, error: `Re-enrichment failed after extraction: ${String(err)}` }, { status: 502 })
+      return apiErrorOk('Re-enrichment failed after extraction', err, 502)
     }
   } catch (err) {
-    return NextResponse.json({ ok: false, error: `Retry failed: ${String(err)}` }, { status: 500 })
+    return apiErrorOk('Retry failed', err, 500)
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { generateQuizQuestionsForCard, QuizGenerationError } from '@/lib/quiz-generator'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -22,6 +23,6 @@ export async function POST(request: Request, { params }: Ctx) {
     if (err instanceof QuizGenerationError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json({ error: `Could not generate quiz questions: ${String(err)}` }, { status: 500 })
+    return apiError('Could not generate quiz questions', err, 500)
   }
 }

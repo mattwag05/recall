@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { findRelatedCards } from '@/lib/related-cards'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -20,9 +21,6 @@ export async function GET(request: Request, { params }: Ctx) {
     if (!cards) return NextResponse.json({ error: 'Card not found' }, { status: 404 })
     return NextResponse.json({ cards, mode: 'semantic' })
   } catch (err) {
-    return NextResponse.json(
-      { error: `Could not find related cards: ${String(err)}` },
-      { status: 503 },
-    )
+    return apiError('Could not find related cards', err, 503)
   }
 }

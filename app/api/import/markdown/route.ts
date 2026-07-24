@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
       } catch (err) {
         failures.push({
           name,
-          error: err instanceof Error ? err.message : `Could not import ${name}.`,
+          error: err instanceof MarkdownImportError ? err.message : `Could not import ${name}.`,
           status: err instanceof MarkdownImportError ? err.status : 500,
         })
       }
@@ -152,7 +153,7 @@ export async function POST(request: Request) {
       failed: failures.length,
     })
   } catch (err) {
-    return NextResponse.json({ error: `Markdown import failed: ${String(err)}` }, { status: 500 })
+    return apiError('Markdown import failed', err, 500)
   }
 }
 

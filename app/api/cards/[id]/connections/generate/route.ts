@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { ConnectionError, generateEntityConnections } from '@/lib/connections'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -14,6 +15,6 @@ export async function POST(_request: Request, { params }: Ctx) {
     if (err instanceof ConnectionError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json({ error: `Could not generate entity links: ${String(err)}` }, { status: 500 })
+    return apiError('Could not generate entity links', err, 500)
   }
 }

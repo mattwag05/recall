@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { ConnectionError, createManualCardConnection, deleteManualConnection } from '@/lib/connections'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -30,7 +31,7 @@ export async function POST(request: Request, { params }: Ctx) {
     if (err instanceof ConnectionError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json({ error: `Could not create card link: ${String(err)}` }, { status: 500 })
+    return apiError('Could not create card link', err, 500)
   }
 }
 
@@ -50,6 +51,6 @@ export async function DELETE(request: Request, { params }: Ctx) {
     if (err instanceof ConnectionError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json({ error: `Could not remove card link: ${String(err)}` }, { status: 500 })
+    return apiError('Could not remove card link', err, 500)
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { getPrisma } from '@/lib/db'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -23,7 +24,7 @@ export async function POST(_req: Request, { params }: Ctx) {
     await prisma.bookmark.update({ where: { id }, data: { shared: true, shareId } })
     return NextResponse.json({ ok: true, shareId })
   } catch (err) {
-    return NextResponse.json({ error: `Could not share card: ${String(err)}` }, { status: 500 })
+    return apiError('Could not share card', err, 500)
   }
 }
 
@@ -39,6 +40,6 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     await prisma.bookmark.update({ where: { id }, data: { shared: false, shareId: null } })
     return NextResponse.json({ ok: true })
   } catch (err) {
-    return NextResponse.json({ error: `Could not unshare card: ${String(err)}` }, { status: 500 })
+    return apiError('Could not unshare card', err, 500)
   }
 }

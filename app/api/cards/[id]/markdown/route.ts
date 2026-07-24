@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { cardToMarkdown, slugifyTitle, type ExportableCard } from '@/lib/markdown-export'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +36,6 @@ export async function GET(_req: Request, { params }: Ctx) {
       },
     })
   } catch (err) {
-    return NextResponse.json({ error: `Card Markdown export failed: ${String(err)}` }, { status: 500 })
+    return apiError('Card Markdown export failed', err, 500)
   }
 }

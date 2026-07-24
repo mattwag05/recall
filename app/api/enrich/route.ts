@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runPipeline } from '@/lib/pipeline'
+import { apiErrorOk } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -14,6 +15,6 @@ export async function POST() {
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 })
+    return apiErrorOk('Enrichment failed', err, 500)
   }
 }

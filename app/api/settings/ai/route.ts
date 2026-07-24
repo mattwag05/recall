@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { AI_PROVIDER_OPTIONS, normalizeAiProvider, providerDefaults, type AiProvider } from '@/lib/ai-settings'
 import { getPrisma } from '@/lib/db'
+import { apiErrorOk } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
     })
   } catch (err) {
     if (err instanceof AiSettingsError) return NextResponse.json({ ok: false, error: err.message }, { status: 400 })
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 502 })
+    return apiErrorOk('Could not save AI settings', err, 502)
   }
 }
 

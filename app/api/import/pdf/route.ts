@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { extractPdfTextOrOcrForImport, MAX_IMPORT_PDF_BYTES, PdfTextExtractionError } from '@/lib/pdf-text'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
       } catch (err) {
         failures.push({
           name,
-          error: err instanceof Error ? err.message : `Could not import ${name}.`,
+          error: err instanceof PdfTextExtractionError ? err.message : `Could not import ${name}.`,
           status: err instanceof PdfTextExtractionError ? err.status : 500,
         })
       }
@@ -140,7 +141,7 @@ export async function POST(request: Request) {
       failed: failures.length,
     })
   } catch (err) {
-    return NextResponse.json({ error: `PDF import failed: ${String(err)}` }, { status: 500 })
+    return apiError('PDF import failed', err, 500)
   }
 }
 

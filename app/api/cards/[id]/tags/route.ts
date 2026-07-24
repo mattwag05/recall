@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmarkById } from '@/lib/fts'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -48,7 +49,7 @@ export async function POST(request: Request, { params }: Ctx) {
 
     return NextResponse.json({ ok: true, tag: { name: category.name, slug: category.slug, color: category.color } })
   } catch (err) {
-    return NextResponse.json({ error: `Could not add tag: ${String(err)}` }, { status: 500 })
+    return apiError('Could not add tag', err, 500)
   }
 }
 
@@ -78,7 +79,7 @@ export async function DELETE(request: Request, { params }: Ctx) {
     try { indexBookmarkById(id) } catch {}
     return NextResponse.json({ ok: true })
   } catch (err) {
-    return NextResponse.json({ error: `Could not remove tag: ${String(err)}` }, { status: 500 })
+    return apiError('Could not remove tag', err, 500)
   }
 }
 

@@ -4,6 +4,7 @@ import { getPrisma } from '@/lib/db'
 import { indexBookmark, removeFromFts } from '@/lib/fts'
 import { readTimeMinutes } from '@/lib/extract/article'
 import { deleteMediaFile } from '@/lib/media-storage'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -14,7 +15,7 @@ function isNotFoundError(err: unknown): boolean {
 }
 
 function internalError(message: string, err: unknown) {
-  return NextResponse.json({ error: `${message}: ${String(err)}` }, { status: 500 })
+  return apiError(message, err, 500)
 }
 
 function parseSemanticTags(value: string | null): string[] {

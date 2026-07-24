@@ -3,6 +3,7 @@ import { getCategorySubtreeSlugs } from '@/lib/category-hierarchy'
 import { getPrisma } from '@/lib/db'
 import { cosineSimilarity, deserializeEmbedding, embedBookmark, embedText, embeddingTextForBookmark, storeBookmarkEmbedding } from '@/lib/embeddings'
 import { ftsSearch, type FtsSearchSurface } from '@/lib/fts'
+import { apiError } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
@@ -139,7 +140,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ cards })
   } catch (err) {
-    return NextResponse.json({ error: `Could not load cards: ${String(err)}` }, { status: 500 })
+    return apiError('Could not load cards', err, 500)
   }
 }
 
