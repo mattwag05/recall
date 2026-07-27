@@ -72,7 +72,20 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             SCOPE="--scope-mode diff --diff-base origin/${{ github.base_ref }}"
           else
-            SCOPE=""
+            # Full-repo scans OOM the oMLX host (~50 GB dynamic guard, homelab#1):
+            # strix keeps full conversation history with no compaction, so a single
+            # deep turn blows the KV cache past the watermark on its own. Scope
+            # schedule/dispatch runs to the last 7 days of commits, matching the
+            # weekly cron cadence. The fetch-depth: 0 checkout above is what makes
+            # this resolvable.
+            BASE=$(git rev-list -1 --before="7 days ago" HEAD)
+            [ -n "$BASE" ] || BASE=$(git rev-parse HEAD~1)
+            if [ "$(git diff --name-only "$BASE" HEAD | wc -l)" -eq 0 ]; then
+              echo "No commits in the last 7 days (base $BASE) — nothing to scan."
+              exit 0
+            fi
+            echo "Diff-scoped to the last 7 days (base $BASE)"
+            SCOPE="--scope-mode diff --diff-base $BASE"
           fi
           echo "Strix $MODE scan (scope: ${SCOPE:-full}) on ${{ github.repository }}"
           set +e
