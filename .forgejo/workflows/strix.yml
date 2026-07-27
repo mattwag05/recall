@@ -69,89 +69,48 @@ jobs:
         if: steps.preflight.outputs.llm_up == 'true'
         run: |
           MODE="${{ github.event.inputs.mode || 'quick' }}"
-          MAX_FILES=20
-          MODEL="${{ vars.STRIX_LLM }}"; MODEL="${MODEL#openai/}"
-          unload() {
-            curl -s --max-time 30 -X POST \
-              -H "Authorization: Bearer ${{ secrets.STRIX_LLM_KEY }}" \
-              "${{ vars.LLM_API_BASE }}/models/$MODEL/unload" >/dev/null || true
-          }
-
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            CHUNKS="origin/${{ github.base_ref }} HEAD"
+            SCOPE="--scope-mode diff --diff-base origin/${{ github.base_ref }}"
           else
+            # Full-repo scans OOM the oMLX host (~50 GB dynamic guard, homelab#1):
+            # strix keeps full conversation history with no compaction, so a single
+            # deep turn blows the KV cache past the watermark on its own. Scope
+            # schedule/dispatch runs to the last 7 days of commits, matching the
+            # weekly cron cadence. The fetch-depth: 0 checkout above is what makes
+            # this resolvable.
             BASE=$(git rev-list -1 --before="7 days ago" HEAD)
             [ -n "$BASE" ] || BASE=$(git rev-parse HEAD~1)
             if [ "$(git diff --name-only "$BASE" HEAD | wc -l)" -eq 0 ]; then
               echo "No commits in the last 7 days (base $BASE) — nothing to scan."
               exit 0
             fi
-            # Split the window into commit ranges of <= MAX_FILES files, each scanned
-            # at its own tip with the engine unloaded in between, so KV growth is
-            # bounded per chunk instead of accumulating across the whole window.
-            # Commit ranges, not file lists: --diff-base is strix's only scope knob and
-            # a further-back base always yields a SUPERSET, so both ends must move.
-            # FLOOR: a single commit larger than MAX_FILES cannot be subdivided this
-            # way (recall has one touching 38 files). Going below that needs file-level
-            # scoping via --instruction, which bypasses strix's own diff machinery.
-            CHUNKS=""
-            cb="$BASE"; prev=""
-            for c in $(git rev-list --reverse "$BASE"..HEAD); do
-              n=$(git diff --name-only "$cb" "$c" | wc -l)
-              if [ "$n" -gt "$MAX_FILES" ] && [ -n "$prev" ]; then
-                CHUNKS="$CHUNKS $cb $prev"; cb="$prev"
-              fi
-              prev="$c"
-            done
-            [ "$(git diff --name-only "$cb" "$prev" | wc -l)" -eq 0 ] || CHUNKS="$CHUNKS $cb $prev"
+            echo "Diff-scoped to the last 7 days (base $BASE)"
+            SCOPE="--scope-mode diff --diff-base $BASE"
           fi
-
-          ORIG=$(git rev-parse HEAD)
-          restore() { git checkout -q "$ORIG" 2>/dev/null || true; }
-          trap restore EXIT
-
-          worst=0; sev_all=""; i=0
-          set -- $CHUNKS
-          total=$(( $# / 2 ))
-          echo "Scanning $total chunk(s), max $MAX_FILES files each"
-          while [ "$#" -ge 2 ]; do
-            cbase="$1"; ctip="$2"; shift 2; i=$((i+1))
-            nf=$(git diff --name-only "$cbase" "$ctip" | wc -l)
-            echo "::group::chunk $i/$total  base=${cbase:0:8} tip=${ctip:0:8}  ${nf} files"
-            git checkout -q "$ctip"
-            unload    # fresh KV per chunk — this is the point of chunking
-            set +e
-            "$HOME/strix-venv/bin/strix" -n -t "$PWD" --scan-mode "$MODE" \
-              --scope-mode diff --diff-base "$cbase" 2>&1 | tee "strix-$i.txt"
-            rc=${PIPESTATUS[0]}
-            set -e
-            echo "::endgroup::"
-            echo "chunk $i rc=$rc"
-            if [ "$rc" = "2" ]; then
-              LINE=$(sed 's/\x1b\[[0-9;]*m//g' "strix-$i.txt" | grep -E 'Vulnerabilities +[A-Z]+:' | tail -1)
-              SEV=$(echo "$LINE" | grep -oE '(CRITICAL|HIGH|MEDIUM|LOW): *[0-9]+' | tr '\n' ' ')
-              if [ -z "$SEV" ]; then
-                echo "::error::chunk $i: could not parse the severity summary — failing closed."
-                worst=2; sev_all="$sev_all UNPARSED"
-              else
-                sev_all="$sev_all $SEV"
-                case "$SEV" in *CRITICAL:*|*HIGH:*) worst=2 ;; esac
-              fi
-            elif [ "$rc" != "0" ]; then
-              # infra/model crash — report the real rc, do not mask it as findings
-              echo "rc=$rc" >> "$GITHUB_OUTPUT"
-              echo "severity=$sev_all" >> "$GITHUB_OUTPUT"
-              exit "$rc"
-            fi
-          done
-
-          echo "rc=$worst" >> "$GITHUB_OUTPUT"
-          echo "severity=$sev_all" >> "$GITHUB_OUTPUT"
-          echo "Strix severity summary across $total chunk(s): ${sev_all:-none}"
-          [ "$worst" = "2" ] && exit 2
-          case "$sev_all" in
-            *LOW:*|*MEDIUM:*) echo "::warning::Strix findings are LOW/MEDIUM only ($sev_all) -- advisory, not failing the job." ;;
+          echo "Strix $MODE scan (scope: ${SCOPE:-full}) on ${{ github.repository }}"
+          set +e
+          "$HOME/strix-venv/bin/strix" -n -t "$PWD" --scan-mode "$MODE" $SCOPE 2>&1 | tee strix-output.txt
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          # Strix exits 2 on ANY finding, and the local model has a real
+          # false-positive rate on nuanced diffs -- a bogus LOW would keep the
+          # branch red indefinitely and the red-main watcher would re-flag it
+          # forever. Fail only on HIGH/CRITICAL; LOW/MEDIUM are advisory.
+          # 2026-07-23, ROADMAP item 11.
+          if [ "$rc" != "2" ]; then exit "$rc"; fi
+          # "Vulnerabilities" also appears in the report prose -- the summary
+          # panel is the LAST line carrying a severity token.
+          LINE=$(sed 's/\x1b\[[0-9;]*m//g' strix-output.txt | grep -E 'Vulnerabilities +[A-Z]+:' | tail -1)
+          SEV=$(echo "$LINE" | grep -oE '(CRITICAL|HIGH|MEDIUM|LOW): *[0-9]+' | tr '\n' ' ')
+          echo "severity=$SEV" >> "$GITHUB_OUTPUT"
+          echo "Strix severity summary: ${SEV:-<unparsed>}"
+          if [ -z "$SEV" ]; then
+            echo "::error::Could not parse the Strix severity summary -- failing closed."; exit 2
+          fi
+          case "$SEV" in
+            *CRITICAL:*|*HIGH:*) exit 2 ;;
           esac
+          echo "::warning::Strix findings are LOW/MEDIUM only ($SEV) -- advisory, not failing the job."
           exit 0
         env:
           STRIX_LLM: ${{ vars.STRIX_LLM }}
