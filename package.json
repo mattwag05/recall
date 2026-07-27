@@ -24,7 +24,7 @@
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@xyflow/react": "^12.10.1",
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^13.0.1",
     "class-variance-authority": "^0.7.1",
     "dompurify": "^3.4.12",
     "dotenv": "^17.4.2",
