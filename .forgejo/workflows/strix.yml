@@ -32,12 +32,32 @@ jobs:
             echo "STRIX_LLM_KEY not set — refusing to run."; exit 1
           fi
 
+      - name: Preflight — LLM reachability probe
+        id: preflight
+        run: |
+          set +e
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+            -H "Authorization: Bearer ${{ secrets.STRIX_LLM_KEY }}" \
+            "${{ vars.LLM_API_BASE }}/models")
+          rc=$?
+          # Unreachable = curl failed OR HTTP 000 (no response). ANY answered
+          # status (401/403/404/500 …) = the host is awake = reachable.
+          if [ "$rc" -ne 0 ] || [ "$CODE" = "000" ]; then
+            echo "llm_up=false" >> "$GITHUB_OUTPUT"
+            echo "LLM host unreachable (curl rc=$rc, http=$CODE) — skipping scan."
+          else
+            echo "llm_up=true" >> "$GITHUB_OUTPUT"
+            echo "LLM host reachable (http=$CODE) — proceeding."
+          fi
+
       - name: Checkout
+        if: steps.preflight.outputs.llm_up == 'true'
         uses: https://data.forgejo.org/actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Reset LLM engine (fresh memory headroom)
+        if: steps.preflight.outputs.llm_up == 'true'
         run: |
           MODEL="${{ vars.STRIX_LLM }}"; MODEL="${MODEL#openai/}"
           curl -s --max-time 30 -X POST \
@@ -46,6 +66,7 @@ jobs:
 
       - name: Scan
         id: scan
+        if: steps.preflight.outputs.llm_up == 'true'
         run: |
           MODE="${{ github.event.inputs.mode || 'quick' }}"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -92,7 +113,7 @@ jobs:
             "${{ vars.LLM_API_BASE }}/models/$MODEL/unload" >/dev/null || true
 
       - name: Alert on findings
-        if: failure() && steps.scan.outputs.rc == '2'
+        if: failure() && steps.scan.outputs.rc == '2' && steps.preflight.outputs.llm_up == 'true'
         run: |
           curl -s --max-time 15 \
             -H "Authorization: Bearer ${{ secrets.NTFY_TOKEN }}" \
@@ -101,7 +122,7 @@ jobs:
             ${{ vars.NTFY_URL }}
 
       - name: Alert on scan crash
-        if: failure() && steps.scan.outputs.rc != '2'
+        if: failure() && steps.scan.outputs.rc != '2' && steps.preflight.outputs.llm_up == 'true'
         run: |
           curl -s --max-time 15 \
             -H "Authorization: Bearer ${{ secrets.NTFY_TOKEN }}" \
@@ -109,8 +130,17 @@ jobs:
             -d "Strix scan CRASHED on ${{ github.ref_name }} (run ${{ github.run_number }}, rc=${{ steps.scan.outputs.rc }}) — infra/LLM-server error, NOT findings. Check the job log." \
             ${{ vars.NTFY_URL }}
 
+      - name: Alert on LLM-unreachable skip
+        if: steps.preflight.outputs.llm_up == 'false'
+        run: |
+          curl -s --max-time 15 \
+            -H "Authorization: Bearer ${{ secrets.NTFY_TOKEN }}" \
+            -H "Title: Strix skipped - ${{ github.repository }}" \
+            -d "Strix scan SKIPPED on ${{ github.ref_name }} (run ${{ github.run_number }}) — LLM host unreachable, scan did not run. Not a crash, not findings." \
+            ${{ vars.NTFY_URL }}
+
       - name: Advisory PR comment on LOW/MEDIUM findings
-        if: success() && steps.scan.outputs.rc == '2' && github.event_name == 'pull_request'
+        if: success() && steps.scan.outputs.rc == '2' && github.event_name == 'pull_request' && steps.preflight.outputs.llm_up == 'true'
         run: |
           printf '%s' '{"body": "\u26a0\ufe0f **Strix advisory** \u2014 findings below the HIGH threshold, so this scan is not blocking the PR.\n\nSeverity: `${{ steps.scan.outputs.severity }}`\n\nFull report is in the job log for run ${{ github.run_number }}. Triage before merge; the local model has a known false-positive rate at LOW/MEDIUM."}' > strix-comment.json
           curl -s --max-time 20 -X POST \
