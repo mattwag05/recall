@@ -15,7 +15,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "30 8 * * 1"   # Mon 08:30 UTC = 04:30 ET (staggered: 2nd of 3, after agentic-crm)
+    - cron: "30 8 * * 1"   # Mon 08:30 UTC = 04:30 ET (staggered: 3rd of 4, after agentic-crm)
 
 jobs:
   strix:
