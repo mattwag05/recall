@@ -165,6 +165,16 @@ $CTX"
     git commit --author "pi-agent <pi-agent@noreply.local>" -m "agent: $(j '.issue.title') (closes #$ISSUE)"
     export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8"
     git remote set-url --push origin "ssh://git@$GIT_SSH_HOST:$GIT_SSH_PORT/$OWNER/$REPO.git"
+    # Rebase onto the latest default branch before pushing. Checkout pins $DEFAULT_BRANCH at
+    # job start, so a PR left open while it moves goes stale silently. Conflict resolution is
+    # a human call — bounce to the label state machine rather than guessing.
+    # GIT_EDITOR=true: runners are non-interactive and git errors with "Terminal is dumb".
+    git fetch --quiet origin "$DEFAULT_BRANCH" || true
+    if ! GIT_EDITOR=true git rebase "origin/$DEFAULT_BRANCH"; then
+      git rebase --abort || true
+      comment "$ISSUE" "🤖 Rebasing onto \`$DEFAULT_BRANCH\` hit conflicts I shouldn't resolve unattended. Needs a human."
+      set_state "$ISSUE" "agent:needs-input"; exit 0
+    fi
     # Branch is agent-owned and a re-label regenerates it from scratch — replace the
     # remote attempt (lease ref exists via agent.yml's fetch-depth: 0 full fetch).
     git push --force-with-lease --set-upstream origin "$BRANCH"
