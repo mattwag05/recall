@@ -71,6 +71,45 @@ run_pi() {  # $1 = prompt (workdir = cwd) ; prints pi output to stdout
   return 1
 }
 
+# Adversarial diff review. A SEPARATE agent on this same host reviews the diff against the
+# approved spec. Which agent is a deployment choice ($REVIEWER_BIN); the properties are not:
+#
+#   - Independent. The reviewer must have had NO part in approving the plan. An approver
+#     reviewing against their own approved plan is confirmation bias, not review.
+#   - Different model from the implementer. A model reviewing its own diff is theatre.
+#   - Fresh context. A new headless turn shares nothing with the implement run.
+#   - No credentials. The reviewer receives only the spec and the diff, and returns text.
+#     This script posts the comment, so the reviewer never holds an API token.
+#   - No --yolo, so approval-gated tools cannot fire unattended in a headless turn.
+#   - Local to the runner host, so the review is a function call, not a network hop.
+review_diff() {  # $1 = issue ; prints the review to stdout ; rc 0 = ran, 1 = unavailable
+  [ -n "${REVIEWER_BIN:-}" ] || { echo "::notice::REVIEWER_BIN unset — skipping adversarial review" >&2; return 1; }
+  [ -x "$REVIEWER_BIN" ] || { echo "::warning::REVIEWER_BIN not executable: $REVIEWER_BIN" >&2; return 1; }
+  local spec diff prompt
+  spec="$(cat "specs/issue-$1.md" 2>/dev/null || echo '(no spec recorded)')"
+  # Cap the diff: a huge one would blow context and produce a worse review than no review.
+  diff="$(git diff "origin/$DEFAULT_BRANCH...$BRANCH" -- ':!specs' | head -c 60000)"
+  [ -n "$diff" ] || { echo "::notice::empty diff — nothing to review" >&2; return 1; }
+  prompt="You are reviewing a pull request written by another AI agent. Be adversarial: your
+job is to find where the implementation fails to honour its contract, not to praise it.
+
+CONTRACT (the approved spec this code was supposed to implement):
+$spec
+
+DIFF UNDER REVIEW:
+$diff
+
+Report only defects you can point at a specific line for. For each: what is wrong, and why
+it breaks. Ignore style. Do not suggest refactors. If the diff is faithful to the contract
+and free of defects, say so plainly.
+
+End your reply with exactly one line, nothing after it:
+REVIEW SEVERITY: <CRITICAL|HIGH|MEDIUM|LOW|NONE>
+Use CRITICAL or HIGH only for a defect that would break production or violate the contract."
+  # Bounded hard: a hung review must never hold the runner. --max-turns caps agent loops,
+  # timeout caps wall-clock. -Q prints a "session_id:" line then the reply; strip it.
+  timeout 600 "$REVIEWER_BIN" chat -Q --max-turns 6 -q "$prompt" 2>/dev/null | grep -v '^session_id:' || return 1
+}
 # ---- PR merged: flip issue to done (issue itself auto-closes via "Closes #N") ----
 if [ "$EVENT_NAME" = "pull_request" ]; then
   N="$(j '.pull_request.body' | grep -oiE 'closes #[0-9]+' | grep -oE '[0-9]+' | head -1 || true)"
@@ -192,6 +231,43 @@ Closes #$ISSUE" '{title:$t, head:$h, base:$b, body:$body}')")"
       PR_URL="$(echo "$PR" | jq -r '.html_url')"
     fi
     comment "$ISSUE" "🤖 Opened PR: $PR_URL"
+    # ADVISORY BY DEFAULT: only HIGH/CRITICAL stops the line; everything else is a comment a
+    # human can ignore. Mirrors the security-scan severity gate, with one deliberate difference
+    # — that one fails CLOSED on an unparseable summary, this fails OPEN. An automated reviewer
+    # that can block every agent PR is worse than no reviewer, and this is not a security
+    # control. The cost of failing open is that "unreviewed" must always be said out loud.
+    if REVIEW="$(review_diff "$ISSUE")"; then
+      # tail -1 for the same reason strix uses it: the word can appear in the prose above.
+      SEV="$(printf '%s' "$REVIEW" | grep -oE 'REVIEW SEVERITY: *(CRITICAL|HIGH|MEDIUM|LOW|NONE)' \
+             | grep -oE '(CRITICAL|HIGH|MEDIUM|LOW|NONE)' | tail -1)"
+      case "${SEV:-}" in
+        CRITICAL|HIGH)
+          comment "$ISSUE" "🔍 **Adversarial review — $SEV**
+
+$REVIEW
+
+_Independent review by a different model than the one that wrote this. Not authoritative — verify before acting._"
+          set_state "$ISSUE" "agent:needs-input"
+          echo "::warning::adversarial review returned $SEV — escalated to Matt"
+          exit 0 ;;
+        MEDIUM|LOW)
+          comment "$ISSUE" "🔍 **Adversarial review — $SEV, advisory**
+
+$REVIEW
+
+_Advisory only; PR not blocked. Independent review by a different model. Verify before acting._" ;;
+        NONE)
+          echo "::notice::adversarial review found nothing" ;;
+        *)
+          # Fails open on purpose (see above), but say so — a silently-skipped review
+          # reads as a clean review, which is the one outcome we must never fake.
+          comment "$ISSUE" "🔍 Adversarial review ran but its verdict was unparseable — **treat this PR as unreviewed**."
+          echo "::warning::unparseable review severity" ;;
+      esac
+    else
+      comment "$ISSUE" "🔍 Adversarial review did not run (reviewer unavailable) — **treat this PR as unreviewed**."
+      echo "::warning::adversarial review unavailable"
+    fi
     set_state "$ISSUE" "agent:in-review"
     ;;
 
