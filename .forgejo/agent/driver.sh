@@ -230,7 +230,20 @@ $CTX"
 Closes #$ISSUE" '{title:$t, head:$h, base:$b, body:$body}')")"
       PR_URL="$(echo "$PR" | jq -r '.html_url')"
     fi
-    comment "$ISSUE" "🤖 Opened PR: $PR_URL"
+    # Evidence-of-scope on the PR (ROADMAP item 15): the change's shape at a glance, so a
+    # reviewer can gauge how hard to look. The driver has the diff in hand; it does NOT run
+    # the repo's tests (CI does that on the PR), so there is no test output to attach here —
+    # that is the larger, per-repo-language piece deferred in item 15. tail -bounded so a
+    # huge diff can't produce a wall; collapsed by default.
+    STAT="$(git diff --stat "origin/$DEFAULT_BRANCH...$BRANCH" -- ':!specs' | tail -40)"
+    comment "$ISSUE" "🤖 Opened PR: $PR_URL
+
+<details><summary>📊 Change summary (\`git diff --stat\` vs \`$DEFAULT_BRANCH\`)</summary>
+
+\`\`\`
+$STAT
+\`\`\`
+</details>"
     # ADVISORY BY DEFAULT: only HIGH/CRITICAL stops the line; everything else is a comment a
     # human can ignore. Mirrors the security-scan severity gate, with one deliberate difference
     # — that one fails CLOSED on an unparseable summary, this fails OPEN. An automated reviewer
