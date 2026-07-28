@@ -35,6 +35,11 @@ jobs:
           LLM_BASE: ${{ vars.LLM_API_BASE }}
           # Absolute path to the globally-installed pi binary on the runner host (resolved at install time).
           PI_BIN: ${{ vars.PI_BIN }}
+          # Adversarial reviewer: absolute path to an agent CLI on the runner host that
+          # reviews the diff against the approved spec. Must be a DIFFERENT model than the
+          # implementer, and must not be whoever approved the plan. UNSET => the review is
+          # skipped and the PR is labelled "unreviewed" rather than silently passing.
+          REVIEWER_BIN: ${{ vars.REVIEWER_BIN }}
           # Forgejo API base reachable from the runner host.
           FORGEJO_API: ${{ vars.FJ_API_BASE }}
           # git-SSH push path to this Forgejo instance.
