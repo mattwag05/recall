@@ -65,6 +65,8 @@ data/media/
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
+*.db-shm
+*.db-wal
 .beads-credential-key
 
 # Project-local MCP config (per-machine, may contain host URLs)
