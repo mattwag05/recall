@@ -63,10 +63,6 @@ export function storeBookmarkEmbedding(bookmarkId: string, embedding: Uint8Array
   getDb().prepare('UPDATE Bookmark SET embedding = ? WHERE id = ?').run(Buffer.from(embedding), bookmarkId)
 }
 
-export function clearBookmarkEmbedding(bookmarkId: string): void {
-  getDb().prepare('UPDATE Bookmark SET embedding = NULL WHERE id = ?').run(bookmarkId)
-}
-
 export function embeddingTextForBookmark(input: EmbeddingBookmarkInput): string {
   const semanticTags = parseStringArray(input.semanticTags)
   const chunks = [

@@ -1,8 +1,6 @@
 import { mkdir, stat, unlink, writeFile } from 'fs/promises'
 import path from 'path'
 
-export const MEDIA_ROOT = path.join(process.cwd(), 'public', 'media')
-
 const MIME_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',

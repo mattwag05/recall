@@ -27,7 +27,6 @@ model Bookmark {
   entities       String?   // JSON object
   actionability  String?   // inspiration / try_this / build_this / reference
   enrichedAt     DateTime?
-  enrichmentMeta String?
   saveAction     String    @default("saved")
   body           String?   // = Recall "readerContent": full extracted article/transcript text
   summary        String?   // short 1-2 sentence summary
@@ -101,7 +100,7 @@ model QuizQuestion {
   bookmark      Bookmark  @relation(fields: [bookmarkId], references: [id], onDelete: Cascade)
   prompt        String
   answer        String
-  type          String    @default("short") // mcq | short | timed | matching
+  type          String    @default("short") // mcq | short
   options       String?   // JSON for mcq
   origin        String    @default("ai")     // ai | manual
   // spaced-repetition scheduling
@@ -150,31 +149,7 @@ model ChatMessage {
   @@index([threadId])
 }
 
-model ImportJob {
-  id             String   @id @default(cuid())
-  filename       String
-  platform       String
-  status         String   @default("pending")
-  totalCount     Int      @default(0)
-  processedCount Int      @default(0)
-  errorMessage   String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
-
 model Setting {
   key   String @id
   value String
-}
-
-model TriageRule {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  conditions  String
-  action      String
-  priority    Int      @default(0)
-  enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 }

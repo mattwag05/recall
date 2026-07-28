@@ -207,10 +207,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
               data: {
                 actionability: result.actionability,
                 enrichedAt: new Date(),
-                enrichmentMeta: JSON.stringify({
-                  enrichedAt: new Date().toISOString(),
-                  stages: Array.from(stageSet),
-                }),
               },
             })
 

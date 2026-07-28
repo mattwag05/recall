@@ -104,10 +104,6 @@ export async function POST(_req: Request, { params }: Ctx) {
           ...(classification ? {
             actionability: classification.actionability,
             enrichedAt: new Date(),
-            enrichmentMeta: JSON.stringify({
-              enrichedAt: new Date().toISOString(),
-              stages: ['retry_extraction', 'semantic_tagging', 'categorization', 'summarization'],
-            }),
           } : {}),
           ...(tldr ? { summary: tldr } : {}),
         },

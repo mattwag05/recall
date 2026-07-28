@@ -124,13 +124,6 @@ export function initFts() {
   if (ftsCount === 0 && bookmarkCount > 0) populateFts(db)
 }
 
-export function rebuildFts() {
-  const db = getDb()
-  initFts()
-  db.exec(`DELETE FROM bookmark_fts`)
-  populateFts(db)
-}
-
 export function ftsSearch(query: string, surfaces?: FtsSearchSurface[]): string[] {
   const db = getDb()
   initFts()

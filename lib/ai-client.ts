@@ -47,7 +47,6 @@ export async function getLLMClient(): Promise<OpenAI> {
 }
 
 /** Back-compat alias — the forked engine imports this name. */
-export const getOpenRouterClient = getLLMClient
 
 export async function getModel(stage: string): Promise<string> {
   // Per-stage override via Settings (model_<stage>), else provider default.

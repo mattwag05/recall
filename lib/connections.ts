@@ -159,10 +159,6 @@ export async function addNotebookWikiLinks(fromId: string, notebookContent: stri
   return added
 }
 
-export function serializeConnection(row: ConnectionRow): ConnectionResult {
-  return toConnectionResult(row)
-}
-
 export class ConnectionError extends Error {
   constructor(message: string, readonly status: number) {
     super(message)
