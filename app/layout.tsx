@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/recall/toaster";
 import { THEME_INIT_SCRIPT } from "@/components/recall/theme-toggle";
+import { CommandPalette } from "@/components/recall/command-palette";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,6 +33,7 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <main>{children}</main>
+        <CommandPalette />
         <Toaster />
       </body>
     </html>
