@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import Link from 'next/link'
 import type { CardListItem } from '@/lib/recall-types'
 import { useDialogFocus } from '@/lib/use-dialog-focus'
+import { errorMessage, readApiError } from '@/lib/api-client'
 
 const RECENT_SEARCHES_KEY = 'recall:recent-searches:v1'
 
@@ -442,17 +443,7 @@ function RecentSearchList({
   )
 }
 
-async function readApiError(res: Response, fallback: string): Promise<string> {
-  const data = await res.json().catch(() => null)
-  if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
-    return data.error
-  }
-  return fallback
-}
 
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback
-}
 
 function searchModeTabId(mode: 'text' | 'ai'): string {
   return `search-mode-tab-${mode}`

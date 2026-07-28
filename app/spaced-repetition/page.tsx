@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getPrisma } from '@/lib/db'
 import { getReviewActivity } from '@/lib/review-activity'
 import { SpacedRepetitionDashboard, type QuestionGroup, type ReviewQuestion } from '@/components/recall/spaced-repetition-dashboard'
+import { addDays } from '@/lib/review-activity'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -126,11 +127,6 @@ function parseQuestionOptions(value: string | null): string[] {
   }
 }
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return next
-}
 
 function questionDueSort(a: string | null, b: string | null) {
   if (!a && !b) return 0

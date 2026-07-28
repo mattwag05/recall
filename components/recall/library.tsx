@@ -8,6 +8,7 @@ import { AddContentModal, type AddContentTab, type SavedContentMeta } from './ad
 import { SearchModal } from './search-modal'
 import { toast } from './toaster'
 import { groupByDate, relativeTime, type CardListItem, type TagNode } from '@/lib/recall-types'
+import { errorMessage } from '@/lib/api-client'
 
 async function fetchCards(tag: string | null) {
   const res = await fetch(`/api/cards${tag ? `?tag=${encodeURIComponent(tag)}` : ''}`)
@@ -485,9 +486,6 @@ function isShortcutTarget(target: EventTarget | null): boolean {
   return !!target.closest('input, textarea, select, button, a, [role="button"], [contenteditable="true"]')
 }
 
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback
-}
 
 function flattenTags(nodes: TagNode[], trail: string[] = []): { slug: string; label: string; color: string; count: number }[] {
   return nodes.flatMap(n => {

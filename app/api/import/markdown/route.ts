@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { apiError } from '@/lib/api-errors'
+import { cardTitle } from '@/lib/format'
 
 export const runtime = 'nodejs'
 
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
         if (existing) {
           cards.push({
             id: existing.id,
-            title: cardTitle(existing.title, existing.text),
+            title: cardTitle(existing.title, existing.text, 'Markdown'),
             status: existing.status,
             extracted: true,
             skipped: true,
@@ -177,9 +178,6 @@ function titleFromMarkdown(filename: string, markdown: string): string {
   return withoutExtension || 'Markdown'
 }
 
-function cardTitle(title: string | null, text: string): string {
-  return title || text.slice(0, 120) || 'Markdown'
-}
 
 function excerptForMarkdown(markdown: string, title: string): string {
   const stripped = stripMarkdown(markdown)

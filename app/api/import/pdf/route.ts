@@ -4,6 +4,7 @@ import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { extractPdfTextOrOcrForImport, MAX_IMPORT_PDF_BYTES, PdfTextExtractionError } from '@/lib/pdf-text'
 import { apiError } from '@/lib/api-errors'
+import { cardTitle } from '@/lib/format'
 
 export const runtime = 'nodejs'
 
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
         if (existing) {
           cards.push({
             id: existing.id,
-            title: cardTitle(existing.title, existing.text),
+            title: cardTitle(existing.title, existing.text, 'PDF'),
             status: existing.status,
             extracted: true,
             skipped: true,
@@ -151,9 +152,6 @@ function titleFromFilename(filename: string): string {
   return withoutExtension || 'PDF'
 }
 
-function cardTitle(title: string | null, text: string): string {
-  return title || text.slice(0, 120) || 'PDF'
-}
 
 function excerptForPdf(text: string, title: string): string {
   const firstLine = text.split('\n').map(line => line.trim()).find(Boolean)

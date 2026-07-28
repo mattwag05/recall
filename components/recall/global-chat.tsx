@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { ChatAnswer, ChatMessageItem, ChatThreadDetail, ChatThreadSummary } from '@/lib/recall-types'
 import { ChatAttachmentControl, type ChatAttachmentDraft } from './chat-attachments'
 import type { ChatCardContext, ChatTagContext } from './chat-context-preview'
+import { apiError } from '@/lib/api-client'
 
 type ContextTab = 'tags' | 'cards'
 
@@ -376,12 +377,6 @@ function isChatThreadResponse(data: unknown): data is { thread: ChatThreadDetail
     Array.isArray((thread as { messages?: unknown }).messages)
 }
 
-function apiError(data: unknown, fallback: string): string {
-  if (data && typeof data === 'object' && 'error' in data && typeof (data as { error?: unknown }).error === 'string') {
-    return (data as { error: string }).error
-  }
-  return fallback
-}
 
 function globalContextTabId(tab: ContextTab): string {
   return `global-chat-context-tab-${tab}`

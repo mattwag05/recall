@@ -1,5 +1,6 @@
 import { InvalidPDFException, PasswordException, PDFParse } from 'pdf-parse'
 import { extractImageTextForImport, ImageVisionError } from './image-vision'
+import { formatBytes } from './format'
 
 export const MAX_CHAT_PDF_BYTES = 1024 * 1024
 export const MAX_CHAT_PDF_CHARS = 12000
@@ -139,11 +140,6 @@ async function extractScannedPdfTextForImport(data: Uint8Array, filename: string
   }
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes % (1024 * 1024) === 0) return `${bytes / (1024 * 1024)} MB`
-  if (bytes % 1024 === 0) return `${bytes / 1024} KB`
-  return `${bytes} B`
-}
 
 function looksLikePdf(data: Uint8Array): boolean {
   const prefix = new TextDecoder('ascii').decode(data.slice(0, Math.min(data.byteLength, 1024)))

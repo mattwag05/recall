@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { BookOpen, FileArchive, FileJson, FileText, Image as ImageIcon, Upload, type LucideIcon } from 'lucide-react'
 import { useDialogFocus } from '@/lib/use-dialog-focus'
+import { apiError } from '@/lib/api-client'
+import { formatFileSize } from '@/lib/format'
 
 export type AddContentTab = 'url' | 'note' | 'wiki' | 'pdf' | 'image' | 'import'
 type SavedContentStatus = 'organizing' | 'summarizing' | 'ready' | 'failed'
@@ -814,12 +816,6 @@ function importFailures(data: unknown): ImportFailure[] {
   return Array.isArray(failures) ? failures.filter(isImportFailure) : []
 }
 
-function apiError(data: unknown, fallback: string): string {
-  if (data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string') {
-    return (data as { error: string }).error
-  }
-  return fallback
-}
 
 function plural(cfg: ImportKindConfig, count: number): string {
   return count === 1 ? cfg.unit[0] : cfg.unit[1]
@@ -1029,8 +1025,3 @@ function ImportSection({ kind, api }: { kind: ImportKind; api: FilePanelApi }) {
   )
 }
 
-function formatFileSize(size: number): string {
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}

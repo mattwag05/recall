@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DEFAULT_REVIEW_PREFERENCES, readReviewPreferences, resolveReviewSessionSize, type ReviewPreferences } from '@/lib/review-preferences'
 import type { ReviewActivity } from '@/lib/review-activity'
+import { apiError } from '@/lib/api-client'
 
 type ReviewTab = 'review' | 'questions'
 
@@ -530,9 +531,3 @@ function normalizeAnswer(value: string): string {
   return value.toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
-function apiError(data: unknown, fallback: string): string {
-  if (data !== null && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
-    return data.error
-  }
-  return fallback
-}

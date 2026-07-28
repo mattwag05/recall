@@ -1,5 +1,6 @@
 import { getPrisma } from './db'
 import { indexBookmarkById } from './fts'
+import { addDays } from './review-activity'
 
 const MAX_QUESTION_TEXT_CHARS = 1200
 const MEMORY_STAGES = ['new', 'learning', 'practiced', 'confident', 'mastered'] as const
@@ -224,11 +225,6 @@ function nextIntervalDays(stage: MemoryStage, currentInterval: number, ease: num
   return 0
 }
 
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return next
-}
 
 function parseMemoryStage(value: string): MemoryStage {
   return MEMORY_STAGES.includes(value as MemoryStage) ? value as MemoryStage : 'new'

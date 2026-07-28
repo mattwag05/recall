@@ -4,6 +4,7 @@ import { getPrisma } from '@/lib/db'
 import { cosineSimilarity, deserializeEmbedding, embedBookmark, embedText, embeddingTextForBookmark, storeBookmarkEmbedding } from '@/lib/embeddings'
 import { ftsSearch, type FtsSearchSurface } from '@/lib/fts'
 import { apiError } from '@/lib/api-errors'
+import { addDays } from '@/lib/review-activity'
 
 export const runtime = 'nodejs'
 
@@ -210,8 +211,3 @@ function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return next
-}

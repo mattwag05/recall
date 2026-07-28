@@ -11,7 +11,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "test": "tsx scripts/check-xss-sanitization.ts && tsx scripts/check-error-leak.ts"
+    "test": "tsx scripts/check-xss-sanitization.ts && tsx scripts/check-error-leak.ts && tsx scripts/check-url-safety.ts && tsx scripts/check-local-ai-fallbacks.ts && tsx scripts/check-quiz-mcq.ts && tsx scripts/check-review-activity.ts && tsx scripts/check-tts.ts && tsx scripts/check-media-transcription.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

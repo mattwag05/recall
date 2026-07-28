@@ -10,6 +10,7 @@ import { readTtsVoice } from '@/lib/tts-preferences'
 import { toast } from './toaster'
 import { relativeTime, type CardDetail, type CardGraph, type CardQuizQuestion, type ChatAnswer, type ChatCitation, type RelatedCard } from '@/lib/recall-types'
 import { ChatAttachmentControl, type ChatAttachmentDraft } from './chat-attachments'
+import { apiError, errorMessage, readApiError } from '@/lib/api-client'
 
 type Tab = 'notebook' | 'reader' | 'chat' | 'quiz' | 'connections' | 'graph'
 type GraphDepth = 1 | 2 | 3
@@ -1139,24 +1140,8 @@ function isChatAnswerResponse(data: unknown): data is { ok: true } & ChatAnswer 
     Array.isArray(data.citations)
 }
 
-function apiError(data: unknown, fallback: string): string {
-  if (data !== null && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
-    return data.error
-  }
-  return fallback
-}
 
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback
-}
 
-async function readApiError(res: Response, fallback: string): Promise<string> {
-  const data = await res.json().catch(() => null)
-  if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
-    return data.error
-  }
-  return fallback
-}
 
 function NotebookPanel(props: {
   cardId: string; content: string; readingStyle: CSSProperties; processing: boolean; editing: boolean; draft: string; regenerating: boolean

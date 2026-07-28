@@ -3,6 +3,8 @@ import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { generateLegacyPostIdFromUrl, generatePostIdFromUrl } from '@/lib/url-capture'
 import { apiError } from '@/lib/api-errors'
+import { validatePublicHttpUrl } from '@/lib/url-safety'
+import { cardTitle } from '@/lib/format'
 
 export const runtime = 'nodejs'
 
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
 
     for (const item of limited) {
       try {
-        const validation = validatePublicHttpUrl(item.url)
+        const validation = validatePublicHttpUrl(item.url, 'Pocket links', 'Pocket')
         if ('error' in validation) {
           throw new PocketImportError(`${item.title}: ${validation.error}`, 400)
         }
@@ -95,7 +97,7 @@ export async function POST(request: Request) {
         if (existing) {
           cards.push({
             id: existing.id,
-            title: cardTitle(existing.title, existing.text),
+            title: cardTitle(existing.title, existing.text, 'Pocket link'),
             status: existing.status,
             extracted: existing.status !== 'failed',
             skipped: true,
@@ -320,35 +322,7 @@ function isPocketCsvFile(file: File, filename: string): boolean {
     file.type === 'application/octet-stream'
 }
 
-function validatePublicHttpUrl(rawUrl: string): { url: URL; error?: never } | { url?: never; error: string } {
-  try {
-    const parsed = new URL(rawUrl)
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return { error: 'Only http and https Pocket links can be imported.' }
-    }
-    if (isPrivateHostname(parsed.hostname)) {
-      return { error: 'Recall blocks localhost, private network, and internal IP links for local safety.' }
-    }
-    return { url: parsed }
-  } catch {
-    return { error: 'Pocket URL is malformed.' }
-  }
-}
 
-function isPrivateHostname(hostname: string): boolean {
-  const host = hostname.toLowerCase()
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true
-  if (host === '0.0.0.0' || host === '169.254.169.254') return true
-  if (host.includes(':') && (host === '::1' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd'))) return true
-
-  const octets = host.split('.')
-  if (octets.length !== 4 || octets.some(p => !/^\d+$/.test(p))) return false
-  const parts = octets.map(p => Number.parseInt(p, 10))
-  if (parts.some(n => n < 0 || n > 255)) return false
-  const [a, b] = parts
-  if (a === 10 || a === 127 || a === 169 && b === 254 || a === 192 && b === 168) return true
-  return a === 172 && b >= 16 && b <= 31
-}
 
 function dateFromPocket(value: string | null): Date {
   if (!value) return new Date()
@@ -363,6 +337,3 @@ function dateFromPocket(value: string | null): Date {
   return Number.isNaN(date.getTime()) ? new Date() : date
 }
 
-function cardTitle(title: string | null, text: string): string {
-  return title || text.slice(0, 120) || 'Pocket link'
-}

@@ -98,7 +98,7 @@ export async function llmChat(messages: ChatMessage[], opts: LlmChatOpts = {}): 
     ? [{ role: 'system', content: opts.system }, ...messages]
     : messages
 
-  const resp = await withTimeout(client.chat.completions.create({
+  const resp = await client.chat.completions.create({
     model,
     messages: finalMessages,
     temperature: opts.temperature ?? 0.2,
@@ -107,7 +107,7 @@ export async function llmChat(messages: ChatMessage[], opts: LlmChatOpts = {}): 
     // chat_template_kwargs is not in the OpenAI type but local OpenAI-compatible servers honor it.
   } as unknown as Parameters<typeof client.chat.completions.create>[0], {
     timeout: settings.requestTimeoutMs,
-  }), settings.requestTimeoutMs)
+  })
 
   const content = (resp as { choices?: Array<{ message?: { content?: string } }> })
     .choices?.[0]?.message?.content ?? ''
@@ -123,7 +123,7 @@ export async function llmVision(
   const client = await getLLMClient()
   const model = opts.model ?? (await getModel(opts.stage ?? 'vision'))
   const base64 = Buffer.from(image.data).toString('base64')
-  const resp = await withTimeout(client.chat.completions.create({
+  const resp = await client.chat.completions.create({
     model,
     messages: [
       ...(opts.system ? [{ role: 'system', content: opts.system }] : []),
@@ -140,7 +140,7 @@ export async function llmVision(
     ...noThinkExtra(settings.provider),
   } as unknown as Parameters<typeof client.chat.completions.create>[0], {
     timeout: settings.requestTimeoutMs,
-  }), settings.requestTimeoutMs)
+  })
 
   const content = (resp as { choices?: Array<{ message?: { content?: string } }> })
     .choices?.[0]?.message?.content ?? ''
@@ -210,18 +210,3 @@ function requestTimeoutMs(value?: string): number {
   return Math.min(300000, Math.max(5000, Math.round(raw)))
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs)
-    promise.then(
-      value => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      err => {
-        clearTimeout(timer)
-        reject(err)
-      },
-    )
-  })
-}

@@ -1,4 +1,5 @@
 import { llmVision } from './ai-client'
+import { formatBytes } from './format'
 
 export const MAX_CHAT_IMAGE_BYTES = 1024 * 1024
 export const MAX_CHAT_IMAGE_CHARS = 12000
@@ -141,8 +142,3 @@ function parseVisionTags(value: string): string[] {
     .slice(0, 8))]
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes % (1024 * 1024) === 0) return `${bytes / (1024 * 1024)} MB`
-  if (bytes % 1024 === 0) return `${bytes / 1024} KB`
-  return `${bytes} B`
-}

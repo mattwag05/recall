@@ -90,14 +90,10 @@ export function serializeEmbedding(values: number[]): Uint8Array<ArrayBuffer> {
 
 export function deserializeEmbedding(value: Uint8Array | null | undefined): number[] | null {
   if (!value || value.byteLength === 0 || value.byteLength % 4 !== 0) return null
-  const view = new DataView(value.buffer, value.byteOffset, value.byteLength)
-  const result: number[] = []
-  for (let offset = 0; offset < value.byteLength; offset += 4) {
-    const next = view.getFloat32(offset, true)
-    if (!Number.isFinite(next)) return null
-    result.push(next)
-  }
-  return result
+  // Prisma hands back a view into a pooled buffer, so respect byteOffset.
+  const floats = new Float32Array(value.buffer, value.byteOffset, value.byteLength / 4)
+  if (!floats.every(Number.isFinite)) return null
+  return Array.from(floats)
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
