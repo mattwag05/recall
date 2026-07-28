@@ -209,6 +209,31 @@ Recall product UI (Next.js) ──►  Pake (Tauri) ──► Recall.app
   colour is a CSS custom property in `app/globals.css`, so a theme is one block
 - **Pake** (Rust/Tauri) for the desktop wrapper
 
+## Deploying (pironman)
+
+The deploy directory `~/Projects/recall` on pironman is a plain git clone of
+`main` — no local edits, no forked copy of the compose file. Redeploying is:
+
+```sh
+cd ~/Projects/recall
+git pull
+docker compose -f docker-compose.deploy.yml build     # must succeed before the next line
+docker compose -f docker-compose.deploy.yml up -d --force-recreate
+```
+
+Run the build as its own step and check it. If the build fails, `up -d` will
+happily recreate the container from the previous image, which looks like a
+successful deploy of code that never shipped.
+
+The database lives outside the clone at `/mnt/storage/appdata/recall/data`
+(bind-mounted to `/data`), so it survives rebuilds. `scripts/start-production.sh`
+applies the Prisma schema on every boot — see the comments there before
+changing it; both obvious "simplifications" of that file have already broken
+production once each.
+
+Everything gitignored in the deploy dir (`data/`, `dist-app/`) is local
+scratch; nothing there needs preserving across a re-clone.
+
 ## Run it (local)
 
 Prereqs: a local LLM server. Default is a **local OpenAI-compatible server** at `http://localhost:8000/v1`;
