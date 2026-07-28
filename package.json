@@ -1,5 +1,5 @@
 {
-  "name": "social-bookmarks-triage-init",
+  "name": "recall",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,7 +11,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "test": "tsx scripts/check-xss-sanitization.ts && tsx scripts/check-error-leak.ts"
+    "test": "tsx scripts/check-xss-sanitization.ts && tsx scripts/check-error-leak.ts && tsx scripts/check-url-safety.ts && tsx scripts/check-triage.ts && tsx scripts/check-local-ai-fallbacks.ts && tsx scripts/check-quiz-mcq.ts && tsx scripts/check-review-activity.ts && tsx scripts/check-tts.ts && tsx scripts/check-media-transcription.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -20,15 +20,9 @@
     "@mozilla/readability": "^0.6.0",
     "@prisma/adapter-better-sqlite3": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@radix-ui/react-dialog": "^1.1.15",
-    "@radix-ui/react-select": "^2.2.6",
-    "@radix-ui/react-tabs": "^1.1.13",
-    "@xyflow/react": "^12.10.1",
     "better-sqlite3": "^12.9.0",
-    "class-variance-authority": "^0.7.1",
     "dompurify": "^3.4.12",
     "dotenv": "^17.4.2",
-    "framer-motion": "^12.35.2",
     "jsdom": "^29.1.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.577.0",
@@ -37,8 +31,7 @@
     "pdf-parse": "^2.4.5",
     "prisma": "^7.8.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "tailwind-merge": "^3.5.0"
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.0",

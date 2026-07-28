@@ -3,14 +3,20 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { BookOpen, Bot, Brain, Bug, CheckSquare, ChevronDown, ChevronRight, Circle, Clock, Command, Cpu, FileQuestion, FileText, HelpCircle, Image as ImageIcon, Inbox, LayoutGrid, Link2, List, Mail, MessageCircle, MessageCircleQuestion, MoreHorizontal, Network, Plus, Search, Settings, Sparkles, Star, Tags, UserCircle, type LucideIcon } from 'lucide-react'
+import { Archive, BookOpen, Bot, Brain, Bug, CheckSquare, ChevronDown, ChevronRight, Circle, Clock, Command, Cpu, FileQuestion, FileText, HelpCircle, Image as ImageIcon, Inbox, LayoutGrid, Link2, List, Mail, MessageCircle, MessageCircleQuestion, MoreHorizontal, Network, Plus, Search, Settings, Sparkles, Star, Tags, UserCircle, type LucideIcon } from 'lucide-react'
 import { AddContentModal, type AddContentTab, type SavedContentMeta } from './add-content-modal'
 import { SearchModal } from './search-modal'
 import { toast } from './toaster'
 import { groupByDate, relativeTime, type CardListItem, type TagNode } from '@/lib/recall-types'
+import { errorMessage } from '@/lib/api-client'
+import { isShortcutTarget } from '@/lib/shortcuts'
 
-async function fetchCards(tag: string | null) {
-  const res = await fetch(`/api/cards${tag ? `?tag=${encodeURIComponent(tag)}` : ''}`)
+async function fetchCards(tag: string | null, triage: 'default' | 'archived' = 'default') {
+  const params = new URLSearchParams()
+  if (tag) params.set('tag', tag)
+  if (triage === 'archived') params.set('triage', 'archived')
+  const qs = params.toString()
+  const res = await fetch(`/api/cards${qs ? `?${qs}` : ''}`)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Could not load cards')
   if (!Array.isArray(data.cards)) {
@@ -47,7 +53,6 @@ export function Library() {
   const [tagQuery, setTagQuery] = useState('')
   const [collapsedTags, setCollapsedTags] = useState<Set<string>>(new Set())
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
-  const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set())
   const [sortMode, setSortMode] = useState<LibrarySort>('updated')
   const [viewMode, setViewMode] = useState<LibraryView>('list')
   const [tagSidebarOpen, setTagSidebarOpen] = useState(true)
@@ -55,13 +60,15 @@ export function Library() {
   const [loaded, setLoaded] = useState(false)
   const [libraryError, setLibraryError] = useState<string | null>(null)
   const [tagError, setTagError] = useState<string | null>(null)
+  const [inboxCount, setInboxCount] = useState(0)
+  const [triageView, setTriageView] = useState<'default' | 'archived'>('default')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const profileMenuRef = useRef<HTMLDivElement | null>(null)
   const profileButtonRef = useRef<HTMLButtonElement | null>(null)
 
-  const loadCards = useCallback(async (tag: string | null) => {
+  const loadCards = useCallback(async (tag: string | null, triage: 'default' | 'archived' = 'default') => {
     try {
-      const nextCards = await fetchCards(tag)
+      const nextCards = await fetchCards(tag, triage)
       setCards(nextCards)
       setLibraryError(null)
     } catch (err) {
@@ -81,23 +88,40 @@ export function Library() {
   }, [])
 
   useEffect(() => {
-    loadCards(activeTag)
-  }, [activeTag, loadCards])
+    loadCards(activeTag, triageView)
+  }, [activeTag, triageView, loadCards])
 
   useEffect(() => {
     loadTags()
   }, [loadTags])
 
+  // Inbox badge: on mount, every 60s, and whenever the inbox triages a card.
+  useEffect(() => {
+    const refresh = () => {
+      fetch('/api/inbox?count=1')
+        .then(res => res.json())
+        .then(data => { if (typeof data.total === 'number') setInboxCount(data.total) })
+        .catch(() => {})
+    }
+    refresh()
+    const timer = setInterval(refresh, 60_000)
+    window.addEventListener('inbox-updated', refresh)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('inbox-updated', refresh)
+    }
+  }, [])
+
   // Poll while any card is still processing (organizing/summarizing).
   useEffect(() => {
     const processing = cards.some(c => c.status === 'organizing' || c.status === 'summarizing')
     if (processing && !pollRef.current) {
-      pollRef.current = setInterval(() => { loadCards(activeTag); loadTags() }, 4000)
+      pollRef.current = setInterval(() => { loadCards(activeTag, triageView); loadTags() }, 4000)
     } else if (!processing && pollRef.current) {
       clearInterval(pollRef.current); pollRef.current = null
     }
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
-  }, [cards, activeTag, loadCards, loadTags])
+  }, [cards, activeTag, triageView, loadCards, loadTags])
 
   // Keyboard: "/" search, "n" new — suppressed while any modal/menu is open.
   useEffect(() => {
@@ -167,8 +191,6 @@ export function Library() {
   const visibleTags = filterTagTree(tags, tagQuery)
   const expandableTagIds = collectExpandableTagIds(tags)
   const activeTagLabel = activeTag ? flatTags.find(t => t.slug === activeTag)?.label ?? activeTag : 'All cards'
-  const visibleCardIds = sortedCards.map(card => card.id)
-  const selectedCardCount = selectedCards.size
   const readyCount = cards.filter(card => card.status === 'ready').length
   const processingCount = cards.filter(card => card.status === 'organizing' || card.status === 'summarizing').length
   const failedCount = cards.filter(card => card.status === 'failed').length
@@ -207,23 +229,6 @@ export function Library() {
     })
   }
 
-  function toggleSelectedCard(id: string) {
-    setSelectedCards(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  function selectAllVisibleCards() {
-    setSelectedCards(new Set(visibleCardIds))
-  }
-
-  function clearSelectedCards() {
-    setSelectedCards(new Set())
-  }
-
   function focusViewMode(next: LibraryView) {
     setViewMode(next)
     window.setTimeout(() => document.getElementById(libraryViewModeId(next))?.focus(), 0)
@@ -253,7 +258,6 @@ export function Library() {
 
   function pickTag(slug: string | null) {
     setActiveTag(slug)
-    setSelectedCards(new Set())
   }
 
   function savedMessage(meta: SavedContentMeta) {
@@ -277,6 +281,9 @@ export function Library() {
       <div className="grid min-h-screen lg:grid-cols-[17rem_minmax(0,1fr)_20rem]">
         <ShellNav
           cardCount={cards.length}
+          inboxCount={inboxCount}
+          triageView={triageView}
+          onSetTriageView={setTriageView}
           readyCount={readyCount}
           reviewDueEstimate={reviewDueEstimate}
           activeTag={activeTag}
@@ -299,17 +306,17 @@ export function Library() {
           collapseAllTags={collapseAllTags}
         />
 
-        <div className="min-w-0 border-x border-[var(--hairline)] bg-white/85 backdrop-blur-sm">
-          <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-[var(--hairline)] bg-white/90 px-4 backdrop-blur md:px-6">
+        <div className="min-w-0 border-x border-[var(--hairline)] bg-[var(--card)]/85 backdrop-blur-sm">
+          <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-[var(--hairline)] bg-[var(--card)]/90 px-4 backdrop-blur md:px-6">
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--paper)] px-3 py-2 text-left text-sm text-[var(--sepia)] transition hover:border-slate-300 hover:bg-white"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--paper)] px-3 py-2 text-left text-sm text-[var(--sepia)] transition hover:border-[var(--btn-hover-edge)] hover:bg-[var(--btn-hover-bg)]"
               onClick={() => setSearchOpen(true)}
               aria-label="Search your library or ask Recall"
             >
               <Search size={16} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate">Search your library, ask anything, or run a command...</span>
-              <kbd className="rounded-md border border-[var(--hairline)] bg-white px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--sepia)]">/</kbd>
+              <kbd className="rounded-md border border-[var(--hairline)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--sepia)]">/</kbd>
             </button>
             <button className="rr-btn rr-btn-accent rr-btn-icon shrink-0" onClick={() => openAdd('url')}>
               <Plus size={15} aria-hidden="true" />
@@ -380,7 +387,7 @@ export function Library() {
                         onKeyDown={e => onViewModeKeyDown(e, option.id)}
                         aria-checked={selected}
                         tabIndex={selected ? 0 : -1}
-                        style={selected ? { borderColor: 'var(--accent)', color: 'var(--accent)', background: '#eff6ff' } : undefined}
+                        style={selected ? { borderColor: 'var(--accent)', color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 15%, transparent)' } : undefined}
                       >
                         <Icon size={14} aria-hidden="true" />
                         <span>{option.label}</span>
@@ -427,64 +434,9 @@ export function Library() {
             </div>
           )}
 
-          <div className="mb-5 flex flex-col gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--sepia)]">
-                <button type="button" className="rounded-md bg-blue-50 px-3 py-1.5 font-medium text-[var(--accent)]">All</button>
-                <button type="button" className="rounded-md px-3 py-1.5 font-medium hover:bg-[var(--paper)]">Unread</button>
-                <button type="button" className="rounded-md px-3 py-1.5 font-medium hover:bg-[var(--paper)]">Favorites</button>
-                <button type="button" className="rounded-md px-3 py-1.5 font-medium hover:bg-[var(--paper)]">Recently added</button>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className="rr-btn rr-btn-icon"
-                  onClick={selectAllVisibleCards}
-                  disabled={visibleCardIds.length === 0}
-                  aria-label="Select all visible cards"
-                >
-                  <CheckSquare size={14} aria-hidden="true" />
-                  <span>Select all</span>
-                </button>
-                <button
-                  type="button"
-                  className="rr-btn"
-                  disabled={selectedCardCount === 0}
-                  onClick={clearSelectedCards}
-                  aria-label="Clear selected cards"
-                >
-                  Clear
-                </button>
-              </div>
-            {selectedCardCount > 0 && (
-              <div className="mt-3 flex flex-col gap-2 rr-rule pb-3 sm:flex-row sm:items-center sm:justify-between">
-                <span className="rr-mono" style={{ color: 'var(--accent)' }}>{selectedCardCount} selected</span>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="rr-btn"
-                    disabled
-                    aria-label="Export selected cards as Markdown (planned)"
-                    title="Batch Markdown export needs a selected-card export API."
-                  >
-                    Export selected
-                  </button>
-                  <button
-                    type="button"
-                    className="rr-btn"
-                    disabled
-                    aria-label="Delete selected cards (planned)"
-                    title="Batch deletion needs confirmation and a selected-card delete API."
-                  >
-                    Delete selected
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
           {!loaded && <p className="rr-mono">opening the archive…</p>}
           {loaded && !libraryError && cards.length === 0 && (
-            <div className="rounded-xl border border-dashed border-[var(--card-edge)] bg-white px-6 py-16 text-center">
+            <div className="rounded-xl border border-dashed border-[var(--card-edge)] bg-[var(--card)] px-6 py-16 text-center">
               <p className="font-display text-xl font-semibold">Your library is empty.</p>
               <p className="rr-prose mt-2">Save your first article, transcript, note, or PDF to start building local memory.</p>
               <button className="rr-btn rr-btn-accent rr-btn-icon mt-5 mx-auto" onClick={() => openAdd('url')}>
@@ -507,8 +459,6 @@ export function Library() {
                       key={c.id}
                       card={c}
                       index={gi * 6 + i}
-                      selected={selectedCards.has(c.id)}
-                      onToggleSelected={toggleSelectedCard}
                     />
                   ))}
                 </div>
@@ -519,8 +469,6 @@ export function Library() {
                       key={c.id}
                       card={c}
                       index={gi * 6 + i}
-                      selected={selectedCards.has(c.id)}
-                      onToggleSelected={toggleSelectedCard}
                     />
                   ))}
                 </div>
@@ -559,15 +507,6 @@ export function Library() {
   )
 }
 
-function isShortcutTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable) return true
-  return !!target.closest('input, textarea, select, button, a, [role="button"], [contenteditable="true"]')
-}
-
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback
-}
 
 function flattenTags(nodes: TagNode[], trail: string[] = []): { slug: string; label: string; color: string; count: number }[] {
   return nodes.flatMap(n => {
@@ -606,6 +545,9 @@ function libraryViewModeId(view: LibraryView): string {
 
 function sortCards(cards: CardListItem[], mode: LibrarySort): CardListItem[] {
   return [...cards].sort((a, b) => {
+    // Pinned cards float to the top of whatever ordering is active.
+    const pinDelta = Number(b.triageStatus === 'pinned') - Number(a.triageStatus === 'pinned')
+    if (pinDelta !== 0) return pinDelta
     const aDate = new Date(mode === 'created' ? a.createdAt : a.updatedAt).getTime()
     const bDate = new Date(mode === 'created' ? b.createdAt : b.updatedAt).getTime()
     return bDate - aDate
@@ -622,7 +564,10 @@ function emptySummaryCopy(card: CardListItem): string {
 
 function ShellNav({
   cardCount,
+  inboxCount,
   readyCount,
+  triageView,
+  onSetTriageView,
   reviewDueEstimate,
   activeTag,
   activeTagLabel,
@@ -643,7 +588,10 @@ function ShellNav({
   collapseAllTags,
 }: {
   cardCount: number
+  inboxCount: number
   readyCount: number
+  triageView: 'default' | 'archived'
+  onSetTriageView: (view: 'default' | 'archived') => void
   reviewDueEstimate: number
   activeTag: string | null
   activeTagLabel: string
@@ -666,13 +614,14 @@ function ShellNav({
 }) {
   const navItems = [
     { label: 'Library', href: '/items', icon: BookOpen, meta: cardCount.toLocaleString(), active: true },
+    { label: 'Inbox', href: '/inbox', icon: Inbox, meta: inboxCount > 99 ? '99+' : inboxCount > 0 ? String(inboxCount) : '' },
     { label: 'Chat', href: '/chat', icon: MessageCircle, meta: '⌘ J' },
     { label: 'Review', href: '/spaced-repetition', icon: Brain, meta: reviewDueEstimate ? String(reviewDueEstimate) : '0' },
     { label: 'Settings', href: '/settings', icon: Settings, meta: '⌘ ,' },
   ]
 
   return (
-    <aside className="hidden min-h-screen border-r border-[var(--hairline)] bg-white/78 px-3 py-4 backdrop-blur lg:flex lg:flex-col">
+    <aside className="hidden min-h-screen border-r border-[var(--hairline)] bg-[var(--paper-2)]/80 px-3 py-4 backdrop-blur lg:flex lg:flex-col">
       <div className="mb-8 flex items-center justify-between px-1">
         <Link href="/items" className="flex items-center gap-3" aria-label="Recall library">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--accent)] text-white shadow-[0_8px_24px_rgba(37,99,235,0.22)]">
@@ -697,7 +646,7 @@ function ShellNav({
             <Link
               key={item.label}
               href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${item.active ? 'bg-blue-50 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--ink)]'}`}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${item.active ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--ink)]'}`}
             >
               <Icon size={17} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -723,23 +672,23 @@ function ShellNav({
           </div>
 
           <button
-            onClick={() => onPickTag(null)}
-            className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium ${activeTag === null ? 'bg-blue-50 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)]'}`}
+            onClick={() => { onPickTag(null); onSetTriageView('default') }}
+            className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium ${activeTag === null && triageView === 'default' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)]'}`}
           >
             <span className="flex items-center gap-2"><Inbox size={15} aria-hidden="true" /> All items</span>
             <span className="font-mono text-xs text-[var(--sepia)]">{cardCount}</span>
           </button>
           <button
-            onClick={() => onPickTag(null)}
-            className="mb-3 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-[var(--ink-soft)] hover:bg-[var(--paper)]"
-            title={activeTagLabel}
+            onClick={() => onSetTriageView(triageView === 'archived' ? 'default' : 'archived')}
+            aria-pressed={triageView === 'archived'}
+            className={`mb-3 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${triageView === 'archived' ? 'bg-[var(--accent)]/15 font-medium text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)]'}`}
+            title="Archived cards are hidden from the library by default"
           >
-            <span className="flex min-w-0 items-center gap-2"><Star size={15} aria-hidden="true" /> <span className="truncate">Ready</span></span>
-            <span className="font-mono text-xs text-[var(--sepia)]">{readyCount}</span>
+            <span className="flex min-w-0 items-center gap-2"><Archive size={15} aria-hidden="true" /> <span className="truncate">Archived</span></span>
           </button>
 
           {selectedTagCount > 0 && (
-            <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+            <div className="mb-3 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/12 px-3 py-2">
               <div className="rr-mono text-[var(--accent)]">{selectedTagCount} selected</div>
               <button type="button" onClick={clearSelectedTags} className="mt-1 text-xs font-medium text-[var(--accent)]">Clear selection</button>
             </div>
@@ -752,7 +701,7 @@ function ShellNav({
             </div>
           )}
 
-          <label className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--hairline)] bg-white px-2">
+          <label className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--hairline)] bg-[var(--card)] px-2">
             <Search size={13} aria-hidden="true" style={{ color: 'var(--sepia)' }} />
             <input
               aria-label="Filter tags"
@@ -849,7 +798,7 @@ function InsightRail({
           <MetricRow icon={Bot} label="Model" value="Local" />
           <MetricRow icon={Cpu} label="Embeddings" value="Ready" />
           <MetricRow icon={Circle} label="Status" value={processingCount > 0 ? 'Running' : 'Idle'} />
-          <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          <div className="mt-3 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/12 px-3 py-2 text-sm text-[var(--success)]">
             All active features run locally.
           </div>
         </RailPanel>
@@ -858,7 +807,7 @@ function InsightRail({
           <RailPanel title="Recent">
             <div className="space-y-2">
               {recentCards.map(card => (
-                <Link key={card.id} href={`/item/${card.id}`} className="block rounded-lg px-2 py-1.5 hover:bg-white">
+                <Link key={card.id} href={`/item/${card.id}`} className="block rounded-lg px-2 py-1.5 hover:bg-[var(--paper)]">
                   <span className="block truncate text-sm font-medium">{card.title}</span>
                   <span className="block font-mono text-xs text-[var(--sepia)]">{relativeTime(card.updatedAt)}</span>
                 </Link>
@@ -873,7 +822,7 @@ function InsightRail({
 
 function RailPanel({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-[var(--hairline)] bg-white p-4 shadow-sm">
+    <section className="rounded-xl border border-[var(--hairline)] bg-[var(--card)] p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="rr-mono text-[var(--ink)]">{title}</h2>
         {action && <span className="text-xs font-medium text-[var(--accent)]">{action}</span>}
@@ -1036,11 +985,11 @@ function QuickTile({
       disabled={disabled}
       aria-label={disabled ? disabledAriaLabel ?? `${label} capture (planned)` : label}
       title={disabled ? disabledTitle ?? `${label} capture is planned for a later phase.` : undefined}
-      className="rr-card text-left px-4 py-3 transition enabled:hover:-translate-y-0.5 enabled:hover:border-blue-200 enabled:hover:shadow-md"
+      className="rr-card text-left px-4 py-3 transition enabled:hover:-translate-y-0.5 enabled:hover:border-[var(--accent)]/40 enabled:hover:shadow-md"
       style={{ borderRadius: 10, opacity: disabled ? 0.62 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
     >
       <div className="flex items-start gap-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-[var(--accent)]">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--accent)]/15 text-[var(--accent)]">
           <Icon size={16} aria-hidden="true" style={{ strokeWidth: 1.9 }} />
         </span>
         <div className="min-w-0">
@@ -1060,7 +1009,7 @@ function ProfileMenu({ onKeyDown }: { onKeyDown: (e: ReactKeyboardEvent<HTMLDivE
       role="menu"
       aria-label="Profile menu"
       onKeyDown={onKeyDown}
-      style={{ borderRadius: 4, width: 'min(18rem, calc(100vw - 2rem))' }}
+      style={{ width: 'min(18rem, calc(100vw - 2rem))' }}
     >
       <div className="mb-3 flex items-start gap-3 rr-rule pb-3">
         <UserCircle size={18} aria-hidden="true" className="mt-1 shrink-0" style={{ color: 'var(--accent)', strokeWidth: 1.7 }} />
@@ -1149,32 +1098,18 @@ function StatusBadge({ status }: { status: string }) {
 function CardGridTile({
   card,
   index,
-  selected,
-  onToggleSelected,
 }: {
   card: CardListItem
   index: number
-  selected: boolean
-  onToggleSelected: (id: string) => void
 }) {
   return (
     <article
       className="rr-card rr-rise relative flex min-h-64 flex-col overflow-hidden"
       style={{
-        borderRadius: 3,
+        borderRadius: 6,
         animationDelay: `${Math.min(index, 12) * 45}ms`,
-        borderColor: selected ? 'var(--accent)' : undefined,
       }}
     >
-      <label className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rr-card" style={{ borderRadius: 3 }}>
-        <input
-          type="checkbox"
-          aria-label={`Select ${card.title}`}
-          checked={selected}
-          onChange={() => onToggleSelected(card.id)}
-          className="h-3.5 w-3.5 accent-[var(--accent)]"
-        />
-      </label>
       {card.thumbnail ? (
         <Link
           href={`/item/${card.id}`}
@@ -1234,32 +1169,19 @@ function CardGridTile({
 function CardRow({
   card,
   index,
-  selected,
-  onToggleSelected,
 }: {
   card: CardListItem
   index: number
-  selected: boolean
-  onToggleSelected: (id: string) => void
 }) {
   return (
     <article
-      className="group mb-3 flex gap-3 rounded-xl border bg-white p-3 rr-rise transition hover:border-blue-200 hover:shadow-sm"
+      className="group mb-3 flex gap-3 rounded-xl border bg-[var(--card)] p-3 rr-rise transition hover:border-[var(--accent)]/40 hover:shadow-sm"
       style={{
         animationDelay: `${Math.min(index, 12) * 45}ms`,
-        borderColor: selected ? 'var(--accent)' : 'var(--hairline)',
+        borderColor: 'var(--hairline)',
       }}
     >
       <span className="mt-12 hidden h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--accent)] sm:block" aria-hidden="true" />
-      <label className="pt-10">
-        <input
-          type="checkbox"
-          aria-label={`Select ${card.title}`}
-          checked={selected}
-          onChange={() => onToggleSelected(card.id)}
-          className="h-3.5 w-3.5 accent-[var(--accent)]"
-        />
-      </label>
       <div className="min-w-0 flex-1">
         <div className="flex gap-4">
         {card.thumbnail && (

@@ -4,6 +4,7 @@ import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { generatePostIdFromUrl } from '@/lib/url-capture'
 import { apiError } from '@/lib/api-errors'
+import { isPrivateHostname } from '@/lib/url-safety'
 
 export const runtime = 'nodejs'
 
@@ -367,22 +368,6 @@ function normalizeUrl(value: string): string {
   return parsed.href
 }
 
-function isPrivateHostname(hostname: string): boolean {
-  const host = hostname.toLowerCase()
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true
-  if (host === '0.0.0.0' || host === '169.254.169.254') return true
-  if (host.includes(':') && (host === '::1' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd'))) {
-    return true
-  }
-
-  const octets = host.split('.')
-  if (octets.length !== 4 || octets.some(part => !/^\d+$/.test(part))) return false
-  const parts = octets.map(part => Number.parseInt(part, 10))
-  if (parts.some(part => part < 0 || part > 255)) return false
-  const [a, b] = parts
-  if (a === 10 || a === 127 || a === 169 && b === 254 || a === 192 && b === 168) return true
-  return a === 172 && b >= 16 && b <= 31
-}
 
 function normalizePlatform(value: string): string {
   const platform = value.toLowerCase().replace(/[^a-z0-9-]/g, '')

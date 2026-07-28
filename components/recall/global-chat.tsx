@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { ChatAnswer, ChatMessageItem, ChatThreadDetail, ChatThreadSummary } from '@/lib/recall-types'
 import { ChatAttachmentControl, type ChatAttachmentDraft } from './chat-attachments'
 import type { ChatCardContext, ChatTagContext } from './chat-context-preview'
+import { apiError } from '@/lib/api-client'
 
 type ContextTab = 'tags' | 'cards'
 
@@ -172,7 +173,7 @@ export function GlobalChat({
         </div>
 
         {historyOpen && (
-          <div id="global-chat-history" className="mt-4 rr-card p-4" style={{ borderRadius: 3 }}>
+          <div id="global-chat-history" className="mt-4 rr-card p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-display" style={{ fontSize: '1.05rem', fontWeight: 500 }}>Recent chats</h2>
               <button className="rr-mono rr-link" type="button" onClick={newThread}>New chat</button>
@@ -241,7 +242,7 @@ export function GlobalChat({
         </div>
 
         {chatError && (
-          <div className="rr-card mt-4 p-4" style={{ borderRadius: 3 }}>
+          <div className="rr-card mt-4 p-4">
             <p className="rr-prose" style={{ fontSize: '0.94rem' }}>{chatError}</p>
           </div>
         )}
@@ -268,7 +269,7 @@ export function GlobalChat({
             }}
             placeholder="What would you like to know?"
             className="mt-3 w-full bg-transparent px-3 py-2 outline-none rr-prose"
-            style={{ border: '1px solid var(--hairline)', resize: 'vertical', borderRadius: 3 }}
+            style={{ border: '1px solid var(--hairline)', resize: 'vertical', borderRadius: 6 }}
           />
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <ContextSummary selectedCards={selectedCardIds.length} selectedTags={selectedTagSlugs.length} selectedAttachments={attachments.length} threadId={threadId} />
@@ -297,7 +298,7 @@ function ContextChecklist({
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       {items.map(item => (
-        <label key={item.id} className="rr-card flex min-w-0 items-start gap-2 p-3" style={{ borderRadius: 3 }}>
+        <label key={item.id} className="rr-card flex min-w-0 items-start gap-2 p-3">
           <input
             type="checkbox"
             checked={selected.includes(item.id)}
@@ -316,7 +317,7 @@ function ContextChecklist({
 
 function ChatMessageBlock({ message }: { message: ChatMessageItem }) {
   return (
-    <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+    <div className="rr-card p-4">
       <p className="rr-mono" style={{ color: message.role === 'assistant' ? 'var(--accent)' : 'var(--sepia)' }}>
         {message.role === 'assistant' ? 'Recall' : 'You'}
       </p>
@@ -376,12 +377,6 @@ function isChatThreadResponse(data: unknown): data is { thread: ChatThreadDetail
     Array.isArray((thread as { messages?: unknown }).messages)
 }
 
-function apiError(data: unknown, fallback: string): string {
-  if (data && typeof data === 'object' && 'error' in data && typeof (data as { error?: unknown }).error === 'string') {
-    return (data as { error: string }).error
-  }
-  return fallback
-}
 
 function globalContextTabId(tab: ContextTab): string {
   return `global-chat-context-tab-${tab}`

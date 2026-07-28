@@ -13,13 +13,10 @@ export type ReviewActivity = {
 // ponytail: day boundaries use the server's local timezone. Fine for a
 // single-user local app; if multi-user/multi-tz ever lands, store a tz per user.
 export function dayKey(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  return date.toLocaleDateString('en-CA')
 }
 
-function addDays(date: Date, days: number): Date {
+export function addDays(date: Date, days: number): Date {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
   return next

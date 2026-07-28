@@ -5,6 +5,7 @@ import { indexBookmark, removeFromFts } from '@/lib/fts'
 import { readTimeMinutes } from '@/lib/extract/article'
 import { deleteMediaFile } from '@/lib/media-storage'
 import { apiError } from '@/lib/api-errors'
+import { parseTriageStatus, TRIAGE_STATUSES } from '@/lib/triage'
 
 export const runtime = 'nodejs'
 
@@ -142,6 +143,14 @@ export async function PATCH(request: Request, { params }: Ctx) {
   if (typeof obj.title === 'string') data.title = obj.title.trim()
   if (typeof obj.notebookContent === 'string') data.notebookContent = obj.notebookContent
   if (typeof obj.notes === 'string') data.notes = obj.notes
+  if ('triageStatus' in obj) {
+    const triageStatus = parseTriageStatus(obj.triageStatus)
+    if (!triageStatus) {
+      return NextResponse.json({ error: `triageStatus must be one of: ${TRIAGE_STATUSES.join(', ')}` }, { status: 400 })
+    }
+    data.triageStatus = triageStatus
+  }
+  // Only content edits invalidate the embedding; triage moves and notes do not.
   if ('title' in data || 'notebookContent' in data) data.embedding = null
 
   if (Object.keys(data).length === 0) {

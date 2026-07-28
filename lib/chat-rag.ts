@@ -3,6 +3,7 @@ import { llmChat, type ChatMessage } from './ai-client'
 import { getPrisma } from './db'
 import { cosineSimilarity, deserializeEmbedding, embedBookmark, embedText, embeddingTextForBookmark, storeBookmarkEmbedding } from './embeddings'
 import type { ChatAnswer, ChatAttachment, ChatCitation, ChatThreadDetail } from './recall-types'
+import { cardTitle } from './format'
 
 const MAX_PROMPT_CHARS = 2000
 const MAX_CONTEXT_CARDS = 6
@@ -267,7 +268,7 @@ function buildUserPrompt(prompt: string, citations: ChatCitation[], cards: Ranke
 }
 
 function formatCardContext(marker: string, row: ChatCardRow): string {
-  const title = cardTitle(row)
+  const title = cardTitle(row.title, row.text)
   const tags = row.categories.map(c => c.category.name).join(', ')
   const chunks = [
     `${marker} ${title}`,
@@ -294,7 +295,7 @@ function formatAttachmentContext(marker: string, attachment: ChatAttachment): st
 function toCitation(item: RankedChatCard, index: number): ChatCitation {
   return {
     cardId: item.row.id,
-    title: cardTitle(item.row),
+    title: cardTitle(item.row.title, item.row.text),
     provider: item.row.provider,
     url: item.row.postUrl,
     summary: item.row.summary,
@@ -338,7 +339,7 @@ function fallbackChatAnswer(cards: RankedChatCard[], citations: ChatCitation[], 
     const summary = usableSummary(item.row.summary) || tldrFromNotebook(item.row.notebookContent) || firstSentence(item.row.body || item.row.text)
     return cards.length === 1
       ? `${summary} [${citation.marker}]`
-      : `- ${cardTitle(item.row)}: ${summary} [${citation.marker}]`
+      : `- ${cardTitle(item.row.title, item.row.text)}: ${summary} [${citation.marker}]`
   })
   return cards.length === 1 ? lines[0] : lines.join('\n')
 }
@@ -372,9 +373,6 @@ function uniqueStrings(value: unknown): string[] {
     : []
 }
 
-function cardTitle(row: Pick<ChatCardRow, 'title' | 'text'>): string {
-  return row.title || row.text.slice(0, 120) || 'Untitled'
-}
 
 function normalizeAttachments(value: ChatAttachment[] | undefined): ChatAttachment[] {
   if (!value) return []

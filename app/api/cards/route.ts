@@ -4,6 +4,7 @@ import { getPrisma } from '@/lib/db'
 import { cosineSimilarity, deserializeEmbedding, embedBookmark, embedText, embeddingTextForBookmark, storeBookmarkEmbedding } from '@/lib/embeddings'
 import { ftsSearch, type FtsSearchSurface } from '@/lib/fts'
 import { apiError } from '@/lib/api-errors'
+import { addDays } from '@/lib/review-activity'
 
 export const runtime = 'nodejs'
 
@@ -18,6 +19,7 @@ const CARD_SELECT = {
   sourceType: true,
   thumbnail: true,
   shared: true,
+  triageStatus: true,
   importedAt: true,
   updatedAt: true,
   categories: { select: { category: { select: { name: true, slug: true, color: true } } } },
@@ -39,6 +41,7 @@ type Row = {
   postUrl: string
   summary: string | null
   status: string
+  triageStatus: string
   sourceType: string
   thumbnail: string | null
   shared: boolean
@@ -62,6 +65,7 @@ function toCard(b: Row) {
     url: b.postUrl,
     summary: b.summary,
     status: b.status,
+    triageStatus: b.triageStatus,
     sourceType: b.sourceType,
     thumbnail: b.thumbnail,
     shared: b.shared,
@@ -104,7 +108,16 @@ export async function GET(request: Request) {
       if (idFilter.length === 0) return NextResponse.json({ cards: [] })
     }
 
+    // Archived cards stay out of every default listing (library + search);
+    // ?triage=archived shows only them, ?triage=all lifts the filter.
+    const triageView = searchParams.get('triage')?.trim()
+    if (triageView && !['archived', 'all'].includes(triageView)) {
+      return NextResponse.json({ error: 'Unsupported triage filter. Use archived or all.' }, { status: 400 })
+    }
+
     const where: Record<string, unknown> = {}
+    if (triageView === 'archived') where.triageStatus = 'archived'
+    else if (triageView !== 'all') where.triageStatus = { not: 'archived' }
     if (idFilter) where.id = { in: idFilter }
     if (date) where.updatedAt = { gte: date }
     if (tag) {
@@ -210,8 +223,3 @@ function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return next
-}

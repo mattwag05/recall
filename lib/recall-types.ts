@@ -11,6 +11,7 @@ export interface CardListItem {
   url: string
   summary: string | null
   status: string
+  triageStatus?: string
   sourceType: string
   thumbnail: string | null
   shared: boolean

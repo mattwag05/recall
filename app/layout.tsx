@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/recall/toaster";
+import { THEME_INIT_SCRIPT } from "@/components/recall/theme-toggle";
+import { CommandPalette } from "@/components/recall/command-palette";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,9 +24,16 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the pre-paint script below sets data-theme on
+    // <html>, so the client DOM intentionally differs from the server HTML.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Applies a stored light theme before first paint — see theme-toggle.tsx. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <main>{children}</main>
+        <CommandPalette />
         <Toaster />
       </body>
     </html>

@@ -6,6 +6,59 @@ this project uses phase-based milestones (see the [roadmap](./README.md#roadmap)
 
 ## [Unreleased]
 
+### Social Bookmarks Triage merge
+
+Merges the best of the retired Social Bookmarks Triage app into Recall (its
+own fork) and trims Recall's codebase in the same pass.
+
+#### Added
+- **Triage inbox** (`/inbox`) — review new cards one at a time with single-key
+  shortcuts (`n`/`p` navigate, `r` reviewed, `s` pin, `a` archive, `e` open),
+  quick note and tag editing, a live count badge in the sidebar, and an
+  Inbox Zero empty state. Backed by a new `Bookmark.triageStatus`
+  (`new | reviewed | pinned | archived`) kept separate from `status`, which
+  remains the processing pipeline.
+- **Command palette** — `⌘K`/`Ctrl+K` from anywhere: jump to any page or
+  search cards, with a focus trap and full keyboard navigation.
+- **Dark theme by default**, with the previous light palette behind a working
+  toggle in Settings (the control that was permanently disabled). Colour
+  contrast was measured against WCAG AA, not eyeballed: the accent splits into
+  a legible text violet and a darker fill so white button text passes.
+- **Archived and pinned views** — archived cards are hidden from the library
+  by default and reachable from a sidebar entry; pinned cards sort first.
+- `scripts/check-triage.ts` and `scripts/check-url-safety.ts`; `npm test` now
+  runs all 9 check scripts instead of 2.
+
+#### Changed
+- The six file-import flows (PDF, image, Markdown, browser bookmarks, Pocket,
+  Social Bookmarks JSON) now share one config-table-driven handler, dropzone
+  and message builder instead of six near-identical copies.
+- Card surfaces are softer (12px) and micro-labels are sans sentence-case
+  rather than uppercase mono, matching Social Bookmarks' look.
+
+#### Removed
+- 7 unused dependencies (`@radix-ui/react-{dialog,select,tabs}`,
+  `@xyflow/react`, `class-variance-authority`, `framer-motion`,
+  `tailwind-merge`).
+- Every permanently-disabled "(planned)" control in Settings, the library's
+  card-selection feature (whose only actions were disabled), the unreferenced
+  `TriageRule` and `ImportJob` models, and `Bookmark.enrichmentMeta`.
+- Duplicated helpers, consolidated into `lib/url-safety.ts` (the SSRF guard,
+  previously 4 copies), `lib/api-client.ts` (11 copies) and `lib/format.ts`.
+
+Net: about 2,600 lines removed.
+
+#### Deploying this change
+1. `prisma db push` runs on boot and will **drop** the `TriageRule` and
+   `ImportJob` tables and the `enrichmentMeta` column. All three were unused.
+2. `triageStatus` defaults to `new`, so on first deploy every existing card
+   would land in the inbox. Run this **once**, immediately after the first
+   boot, to start from Inbox Zero:
+   ```sql
+   UPDATE Bookmark SET triageStatus = 'reviewed';
+   ```
+   Do not put it in the boot script — it would re-review future inbox items.
+
 ### Phase 2 refinements
 
 #### Added

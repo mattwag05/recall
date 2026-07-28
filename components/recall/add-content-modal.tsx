@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { BookOpen, FileArchive, FileJson, FileText, Image as ImageIcon, Upload } from 'lucide-react'
+import { BookOpen, FileArchive, FileJson, FileText, Image as ImageIcon, Upload, type LucideIcon } from 'lucide-react'
 import { useDialogFocus } from '@/lib/use-dialog-focus'
+import { apiError } from '@/lib/api-client'
+import { formatFileSize } from '@/lib/format'
 
 export type AddContentTab = 'url' | 'note' | 'wiki' | 'pdf' | 'image' | 'import'
 type SavedContentStatus = 'organizing' | 'summarizing' | 'ready' | 'failed'
@@ -15,21 +17,251 @@ export interface SavedContentMeta {
   message?: string
 }
 
-const TABS: { id: AddContentTab; label: string; ready: boolean }[] = [
-  { id: 'url', label: 'URL', ready: true },
-  { id: 'wiki', label: 'Wiki', ready: true },
-  { id: 'pdf', label: 'PDF', ready: true },
-  { id: 'image', label: 'Image', ready: true },
-  { id: 'import', label: 'Import', ready: true },
-  { id: 'note', label: 'Note', ready: true },
+const TABS: { id: AddContentTab; label: string }[] = [
+  { id: 'url', label: 'URL' },
+  { id: 'wiki', label: 'Wiki' },
+  { id: 'pdf', label: 'PDF' },
+  { id: 'image', label: 'Image' },
+  { id: 'import', label: 'Import' },
+  { id: 'note', label: 'Note' },
 ]
 
-const MAX_PDF_IMPORT_FILES = 10
-const MAX_IMAGE_IMPORT_FILES = 10
-const MAX_MARKDOWN_IMPORT_FILES = 10
-const MAX_BOOKMARK_IMPORT_FILES = 1
-const MAX_POCKET_IMPORT_FILES = 1
-const MAX_SOCIAL_BOOKMARKS_IMPORT_FILES = 1
+type ImportKind = 'pdf' | 'image' | 'markdown' | 'bookmarks' | 'pocket' | 'social-bookmarks'
+
+// Every file-import source is the same flow — pick files, POST multipart, read
+// {cards, failures, imported, skipped, failed}. Only the copy and the accept
+// filter differ, so they live here as data and share one handler + one panel.
+type ImportKindConfig = {
+  id: ImportKind
+  endpoint: string
+  max: number
+  accept: string
+  icon: LucideIcon
+  matches: (file: File) => boolean
+  savedKind: SavedContentMeta['kind']
+  /** [singular, plural] used for counts: "3 PDFs imported", "1 Pocket link imported" */
+  unit: [string, string]
+  /** overrides `unit` in the "N selected …" line (single-file kinds read better) */
+  selectedNoun?: string
+  fileNoun: string
+  issuesLabel: string
+  dropTitle: string
+  dropHelp: string
+  chooseLabel: string
+  chooseAria: string
+  chooseTitle: string
+  importLabel: string
+  /** fixed busy line; multi-file kinds fall back to a counted one */
+  busyMessage?: string
+  tooManyMessage: string
+  wrongTypeMessage: string
+  errorFallback: string
+  unexpectedMessage: string
+  unreachableMessage: string
+  enrichMessage: string
+  /** static value for SavedContentMeta.extracted; omit to read it off the first card */
+  extracted?: boolean
+  /** count only cards that actually extracted text when deciding to enrich */
+  countExtractedOnly?: boolean
+  messageSuffix?: (data: ImportResponse) => string
+  tall?: boolean
+}
+
+function hasExtension(file: File, extensions: string[]): boolean {
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return extensions.includes(extension)
+}
+
+const IMPORT_KINDS: Record<ImportKind, ImportKindConfig> = {
+  pdf: {
+    id: 'pdf',
+    endpoint: '/api/import/pdf',
+    max: 10,
+    accept: '.pdf,application/pdf',
+    icon: Upload,
+    matches: file => file.type === 'application/pdf' || hasExtension(file, ['pdf']),
+    savedKind: 'pdf',
+    unit: ['PDF', 'PDFs'],
+    fileNoun: 'PDF',
+    issuesLabel: 'PDF',
+    dropTitle: 'Drop PDFs here',
+    dropHelp: 'Choose up to 10 PDFs. Selectable text imports directly; scanned PDFs use local OCR/vision.',
+    chooseLabel: 'Choose PDFs',
+    chooseAria: 'Choose PDF files',
+    chooseTitle: 'Choose up to 10 PDFs to save as local document cards.',
+    importLabel: 'Import PDFs',
+    tooManyMessage: 'Import up to 10 PDFs at a time.',
+    wrongTypeMessage: 'Only PDF files can be imported from this panel.',
+    errorFallback: 'Could not import those PDFs. Check that they contain selectable text.',
+    unexpectedMessage: 'The local PDF import API returned an unexpected response. Try again, or restart Recall.',
+    unreachableMessage: 'Could not reach the local PDF import API. Check that Recall is still running, then try again.',
+    enrichMessage: 'Summarizing PDFs with the local model…',
+    extracted: true,
+    tall: true,
+  },
+  image: {
+    id: 'image',
+    endpoint: '/api/import/image',
+    max: 10,
+    accept: '.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp',
+    icon: ImageIcon,
+    matches: file =>
+      file.type === 'image/png' || file.type === 'image/jpeg' || file.type === 'image/webp' ||
+      hasExtension(file, ['png', 'jpg', 'jpeg', 'webp']),
+    savedKind: 'image',
+    unit: ['image', 'images'],
+    fileNoun: 'image',
+    issuesLabel: 'Image',
+    dropTitle: 'Drop images here',
+    dropHelp: 'Choose up to 10 PNG, JPG, or WebP images. Recall saves the image locally and extracts OCR/vision text when the local model is available.',
+    chooseLabel: 'Choose images',
+    chooseAria: 'Choose image files',
+    chooseTitle: 'Choose up to 10 images to save as local media cards.',
+    importLabel: 'Import images',
+    tooManyMessage: 'Import up to 10 images at a time.',
+    wrongTypeMessage: 'Only PNG, JPG, or WebP images can be imported from this panel.',
+    errorFallback: 'Could not import those images. Use PNG, JPG, or WebP files.',
+    unexpectedMessage: 'The local image import API returned an unexpected response. Try again, or restart Recall.',
+    unreachableMessage: 'Could not reach the local image import API. Check that Recall is still running, then try again.',
+    enrichMessage: 'Summarizing images with the local model…',
+    countExtractedOnly: true,
+    messageSuffix: data => {
+      const extracted = data.cards.filter(card => !card.skipped && card.extracted).length
+      const savedWithoutText = data.cards.filter(card => !card.skipped && !card.extracted).length
+      if (extracted > 0) return 'Summarizing OCR/vision text on your local model…'
+      if (savedWithoutText > 0) return 'Saved locally; OCR/vision is unavailable.'
+      return ''
+    },
+    tall: true,
+  },
+  bookmarks: {
+    id: 'bookmarks',
+    endpoint: '/api/import/bookmarks',
+    max: 1,
+    accept: '.html,.htm,text/html',
+    icon: BookOpen,
+    matches: file =>
+      file.type === 'text/html' || file.type === 'application/octet-stream' || hasExtension(file, ['html', 'htm']),
+    savedKind: 'bookmarks',
+    unit: ['browser bookmark', 'browser bookmarks'],
+    selectedNoun: 'bookmarks export',
+    fileNoun: 'browser bookmarks',
+    issuesLabel: 'Browser bookmarks',
+    dropTitle: 'Drop browser bookmarks HTML here',
+    dropHelp: 'Choose one Chrome, Firefox, or Edge bookmarks export. Recall imports public http(s) links, preserves folder paths, and skips duplicates.',
+    chooseLabel: 'Choose bookmarks',
+    chooseAria: 'Choose browser bookmarks file',
+    chooseTitle: 'Choose one Chrome, Firefox, or Edge bookmarks HTML export.',
+    importLabel: 'Import bookmarks',
+    busyMessage: 'Importing browser bookmarks…',
+    tooManyMessage: 'Import one browser bookmarks export at a time.',
+    wrongTypeMessage: 'Only browser bookmark HTML exports can be imported from this panel.',
+    errorFallback: 'Could not import that browser bookmarks export. Use a Chrome, Firefox, or Edge HTML export.',
+    unexpectedMessage: 'The local browser bookmarks import API returned an unexpected response. Try again, or restart Recall.',
+    unreachableMessage: 'Could not reach the local browser bookmarks import API. Check that Recall is still running, then try again.',
+    enrichMessage: 'Summarizing imported bookmarks with the local model…',
+    extracted: false,
+  },
+  pocket: {
+    id: 'pocket',
+    endpoint: '/api/import/pocket',
+    max: 1,
+    accept: '.csv,text/csv,application/csv,application/vnd.ms-excel',
+    icon: FileArchive,
+    matches: file =>
+      file.type === 'text/csv' || file.type === 'application/csv' ||
+      file.type === 'application/vnd.ms-excel' || file.type === 'application/octet-stream' ||
+      hasExtension(file, ['csv']),
+    savedKind: 'pocket',
+    unit: ['Pocket link', 'Pocket links'],
+    selectedNoun: 'Pocket CSV',
+    fileNoun: 'Pocket CSV',
+    issuesLabel: 'Pocket',
+    dropTitle: 'Drop Pocket CSV here',
+    dropHelp: 'Choose one Pocket export CSV. Recall imports public links, preserves Pocket tags/status metadata, and skips duplicates.',
+    chooseLabel: 'Choose Pocket CSV',
+    chooseAria: 'Choose Pocket CSV file',
+    chooseTitle: 'Choose one Pocket CSV export.',
+    importLabel: 'Import Pocket',
+    busyMessage: 'Importing Pocket links…',
+    tooManyMessage: 'Import one Pocket CSV export at a time.',
+    wrongTypeMessage: 'Only Pocket CSV exports can be imported from this panel.',
+    errorFallback: 'Could not import that Pocket CSV export. Use a Pocket CSV file with URL and title columns.',
+    unexpectedMessage: 'The local Pocket import API returned an unexpected response. Try again, or restart Recall.',
+    unreachableMessage: 'Could not reach the local Pocket import API. Check that Recall is still running, then try again.',
+    enrichMessage: 'Summarizing imported Pocket links with the local model…',
+    extracted: false,
+  },
+  'social-bookmarks': {
+    id: 'social-bookmarks',
+    endpoint: '/api/import/social-bookmarks',
+    max: 1,
+    accept: '.json,application/json',
+    icon: FileJson,
+    matches: file =>
+      file.type === 'application/json' || file.type === 'application/octet-stream' || hasExtension(file, ['json']),
+    savedKind: 'social-bookmarks',
+    unit: ['Social Bookmarks item', 'Social Bookmarks items'],
+    selectedNoun: 'Social Bookmarks JSON',
+    fileNoun: 'Social Bookmarks JSON',
+    issuesLabel: 'Social Bookmarks',
+    dropTitle: 'Drop Social Bookmarks JSON here',
+    dropHelp: 'Choose one Social Bookmarks Triage JSON export or bookmarklet file. Recall preserves social source metadata, categories, semantic tags, actionability, and media references.',
+    chooseLabel: 'Choose Social JSON',
+    chooseAria: 'Choose Social Bookmarks JSON file',
+    chooseTitle: 'Choose one Social Bookmarks Triage JSON export or bookmarklet file.',
+    importLabel: 'Import Social Bookmarks',
+    busyMessage: 'Importing Social Bookmarks…',
+    tooManyMessage: 'Import one Social Bookmarks Triage JSON export at a time.',
+    wrongTypeMessage: 'Only Social Bookmarks Triage JSON exports can be imported from this panel.',
+    errorFallback: 'Could not import that Social Bookmarks Triage JSON export. Use a JSON export or bookmarklet file.',
+    unexpectedMessage: 'The local Social Bookmarks import API returned an unexpected response. Try again, or restart Recall.',
+    unreachableMessage: 'Could not reach the local Social Bookmarks import API. Check that Recall is still running, then try again.',
+    enrichMessage: 'Summarizing imported Social Bookmarks with the local model…',
+    extracted: true,
+  },
+  markdown: {
+    id: 'markdown',
+    endpoint: '/api/import/markdown',
+    max: 10,
+    accept: '.md,.markdown,text/markdown,text/x-markdown',
+    icon: FileText,
+    matches: file =>
+      file.type === 'text/markdown' || file.type === 'text/x-markdown' || hasExtension(file, ['md', 'markdown']),
+    savedKind: 'markdown',
+    unit: ['Markdown file', 'Markdown files'],
+    fileNoun: 'Markdown',
+    issuesLabel: 'Markdown',
+    dropTitle: 'Drop Markdown files here',
+    dropHelp: 'Choose up to 10 `.md` or `.markdown` files. Recall stores the original Markdown as Reader text and summarizes it locally.',
+    chooseLabel: 'Choose Markdown',
+    chooseAria: 'Choose Markdown files',
+    chooseTitle: 'Choose up to 10 Markdown files to save as local document cards.',
+    importLabel: 'Import Markdown',
+    tooManyMessage: 'Import up to 10 Markdown files at a time.',
+    wrongTypeMessage: 'Only .md or .markdown files can be imported from this panel.',
+    errorFallback: 'Could not import those Markdown files. Use .md or .markdown files.',
+    unexpectedMessage: 'The local Markdown import API returned an unexpected response. Try again, or restart Recall.',
+    unreachableMessage: 'Could not reach the local Markdown import API. Check that Recall is still running, then try again.',
+    enrichMessage: 'Summarizing Markdown files with the local model…',
+    extracted: true,
+    tall: true,
+  },
+}
+
+// Section + footer-button order for the Import tab.
+const IMPORT_TAB_KINDS: ImportKind[] = ['bookmarks', 'pocket', 'social-bookmarks', 'markdown']
+
+type Selection = { files: File[]; failures: ImportFailure[] }
+
+const EMPTY_SELECTIONS: Record<ImportKind, Selection> = {
+  pdf: { files: [], failures: [] },
+  image: { files: [], failures: [] },
+  markdown: { files: [], failures: [] },
+  bookmarks: { files: [], failures: [] },
+  pocket: { files: [], failures: [] },
+  'social-bookmarks': { files: [], failures: [] },
+}
 
 export function AddContentModal({
   open,
@@ -48,26 +280,12 @@ export function AddContentModal({
   const [noteText, setNoteText] = useState('')
   const [wikiQuery, setWikiQuery] = useState('')
   const [wikiResults, setWikiResults] = useState<WikiSearchResult[]>([])
-  const [pdfFiles, setPdfFiles] = useState<File[]>([])
-  const [pdfFailures, setPdfFailures] = useState<PdfImportFailure[]>([])
-  const [imageFiles, setImageFiles] = useState<File[]>([])
-  const [imageFailures, setImageFailures] = useState<ImageImportFailure[]>([])
-  const [markdownFiles, setMarkdownFiles] = useState<File[]>([])
-  const [markdownFailures, setMarkdownFailures] = useState<MarkdownImportFailure[]>([])
-  const [bookmarkFiles, setBookmarkFiles] = useState<File[]>([])
-  const [bookmarkFailures, setBookmarkFailures] = useState<BookmarkImportFailure[]>([])
-  const [pocketFiles, setPocketFiles] = useState<File[]>([])
-  const [pocketFailures, setPocketFailures] = useState<PocketImportFailure[]>([])
-  const [socialBookmarkFiles, setSocialBookmarkFiles] = useState<File[]>([])
-  const [socialBookmarkFailures, setSocialBookmarkFailures] = useState<SocialBookmarksImportFailure[]>([])
+  const [selections, setSelections] = useState<Record<ImportKind, Selection>>(EMPTY_SELECTIONS)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const pdfInputRef = useRef<HTMLInputElement | null>(null)
-  const imageInputRef = useRef<HTMLInputElement | null>(null)
-  const markdownInputRef = useRef<HTMLInputElement | null>(null)
-  const bookmarkInputRef = useRef<HTMLInputElement | null>(null)
-  const pocketInputRef = useRef<HTMLInputElement | null>(null)
-  const socialBookmarksInputRef = useRef<HTMLInputElement | null>(null)
+  const inputRefs = useRef<Record<ImportKind, HTMLInputElement | null>>({
+    pdf: null, image: null, markdown: null, bookmarks: null, pocket: null, 'social-bookmarks': null,
+  })
   const dialogRef = useRef<HTMLDivElement | null>(null)
   useDialogFocus(open, dialogRef)
 
@@ -226,409 +444,82 @@ export function AddContentModal({
     }
   }
 
-  async function savePdfs() {
-    if (pdfFiles.length === 0 || busy) return
-    setBusy(true); setMsg(`Importing ${pdfFiles.length} ${pdfFiles.length === 1 ? 'PDF' : 'PDFs'}…`); setPdfFailures([])
+  async function importFiles(kind: ImportKind) {
+    const cfg = IMPORT_KINDS[kind]
+    const files = selections[kind].files
+    if (files.length === 0 || busy) return
+    setBusy(true)
+    setMsg(cfg.busyMessage ?? `Importing ${files.length} ${plural(cfg, files.length)}…`)
+    setFailures(kind, [])
     try {
       const formData = new FormData()
-      for (const file of pdfFiles) formData.append('files', file)
-      const res = await fetch('/api/import/pdf', {
-        method: 'POST',
-        body: formData,
-      })
+      for (const file of files) formData.append('files', file)
+      const res = await fetch(cfg.endpoint, { method: 'POST', body: formData })
       const data = await res.json().catch(() => null) as unknown
       if (!res.ok) {
-        const failures = pdfImportFailures(data)
-        setPdfFailures(failures)
-        setMsg(apiError(data, 'Could not import those PDFs. Check that they contain selectable text.'))
+        setFailures(kind, importFailures(data))
+        setMsg(apiError(data, cfg.errorFallback))
         setBusy(false)
         return
       }
-      if (!isPdfImportResponse(data)) {
-        setMsg('The local PDF import API returned an unexpected response. Try again, or restart Recall.')
+      if (!isImportResponse(data)) {
+        setMsg(cfg.unexpectedMessage)
         setBusy(false)
         return
       }
-      const importedCards = data.cards.filter(card => !card.skipped)
-      if (data.failures.length > 0) {
-        setPdfFailures(data.failures)
-      }
+      const importedCards = data.cards.filter(card =>
+        !card.skipped && (cfg.countExtractedOnly ? card.extracted : true))
+      if (data.failures.length > 0) setFailures(kind, data.failures)
       if (importedCards.length > 0) {
-        setMsg('Summarizing PDFs with the local model…')
+        setMsg(cfg.enrichMessage)
         fetch('/api/enrich', { method: 'POST' }).catch(() => {})
       }
       const firstCard = data.cards[0]
       onSaved(firstCard.id, {
-        kind: 'pdf',
+        kind: cfg.savedKind,
         status: firstCard.status,
-        extracted: true,
+        extracted: cfg.extracted ?? firstCard.extracted,
         skipped: data.imported === 0 && data.skipped > 0,
-        message: pdfImportMessage(data),
+        message: importMessage(cfg, data),
       })
       reset()
     } catch {
-      setMsg('Could not reach the local PDF import API. Check that Recall is still running, then try again.')
+      setMsg(cfg.unreachableMessage)
       setBusy(false)
     }
   }
 
-  async function saveImages() {
-    if (imageFiles.length === 0 || busy) return
-    setBusy(true); setMsg(`Importing ${imageFiles.length} ${imageFiles.length === 1 ? 'image' : 'images'}…`); setImageFailures([])
-    try {
-      const formData = new FormData()
-      for (const file of imageFiles) formData.append('files', file)
-      const res = await fetch('/api/import/image', {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await res.json().catch(() => null) as unknown
-      if (!res.ok) {
-        const failures = imageImportFailures(data)
-        setImageFailures(failures)
-        setMsg(apiError(data, 'Could not import those images. Use PNG, JPG, or WebP files.'))
-        setBusy(false)
-        return
-      }
-      if (!isImageImportResponse(data)) {
-        setMsg('The local image import API returned an unexpected response. Try again, or restart Recall.')
-        setBusy(false)
-        return
-      }
-      const importedCards = data.cards.filter(card => !card.skipped && card.extracted)
-      if (data.failures.length > 0) {
-        setImageFailures(data.failures)
-      }
-      if (importedCards.length > 0) {
-        setMsg('Summarizing images with the local model…')
-        fetch('/api/enrich', { method: 'POST' }).catch(() => {})
-      }
-      const firstCard = data.cards[0]
-      onSaved(firstCard.id, {
-        kind: 'image',
-        status: firstCard.status,
-        extracted: firstCard.extracted,
-        skipped: data.imported === 0 && data.skipped > 0,
-        message: imageImportMessage(data),
-      })
-      reset()
-    } catch {
-      setMsg('Could not reach the local image import API. Check that Recall is still running, then try again.')
-      setBusy(false)
-    }
-  }
-
-  async function saveMarkdownFiles() {
-    if (markdownFiles.length === 0 || busy) return
-    setBusy(true); setMsg(`Importing ${markdownFiles.length} Markdown ${markdownFiles.length === 1 ? 'file' : 'files'}…`); setMarkdownFailures([])
-    try {
-      const formData = new FormData()
-      for (const file of markdownFiles) formData.append('files', file)
-      const res = await fetch('/api/import/markdown', {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await res.json().catch(() => null) as unknown
-      if (!res.ok) {
-        const failures = markdownImportFailures(data)
-        setMarkdownFailures(failures)
-        setMsg(apiError(data, 'Could not import those Markdown files. Use .md or .markdown files.'))
-        setBusy(false)
-        return
-      }
-      if (!isMarkdownImportResponse(data)) {
-        setMsg('The local Markdown import API returned an unexpected response. Try again, or restart Recall.')
-        setBusy(false)
-        return
-      }
-      const importedCards = data.cards.filter(card => !card.skipped)
-      if (data.failures.length > 0) {
-        setMarkdownFailures(data.failures)
-      }
-      if (importedCards.length > 0) {
-        setMsg('Summarizing Markdown files with the local model…')
-        fetch('/api/enrich', { method: 'POST' }).catch(() => {})
-      }
-      const firstCard = data.cards[0]
-      onSaved(firstCard.id, {
-        kind: 'markdown',
-        status: firstCard.status,
-        extracted: true,
-        skipped: data.imported === 0 && data.skipped > 0,
-        message: markdownImportMessage(data),
-      })
-      reset()
-    } catch {
-      setMsg('Could not reach the local Markdown import API. Check that Recall is still running, then try again.')
-      setBusy(false)
-    }
-  }
-
-  async function saveBookmarkFile() {
-    if (bookmarkFiles.length === 0 || busy) return
-    setBusy(true); setMsg('Importing browser bookmarks…'); setBookmarkFailures([])
-    try {
-      const formData = new FormData()
-      for (const file of bookmarkFiles) formData.append('files', file)
-      const res = await fetch('/api/import/bookmarks', {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await res.json().catch(() => null) as unknown
-      if (!res.ok) {
-        const failures = bookmarkImportFailures(data)
-        setBookmarkFailures(failures)
-        setMsg(apiError(data, 'Could not import that browser bookmarks export. Use a Chrome, Firefox, or Edge HTML export.'))
-        setBusy(false)
-        return
-      }
-      if (!isBookmarkImportResponse(data)) {
-        setMsg('The local browser bookmarks import API returned an unexpected response. Try again, or restart Recall.')
-        setBusy(false)
-        return
-      }
-      const importedCards = data.cards.filter(card => !card.skipped)
-      if (data.failures.length > 0) {
-        setBookmarkFailures(data.failures)
-      }
-      if (importedCards.length > 0) {
-        setMsg('Summarizing imported bookmarks with the local model…')
-        fetch('/api/enrich', { method: 'POST' }).catch(() => {})
-      }
-      const firstCard = data.cards[0]
-      onSaved(firstCard.id, {
-        kind: 'bookmarks',
-        status: firstCard.status,
-        extracted: false,
-        skipped: data.imported === 0 && data.skipped > 0,
-        message: bookmarkImportMessage(data),
-      })
-      reset()
-    } catch {
-      setMsg('Could not reach the local browser bookmarks import API. Check that Recall is still running, then try again.')
-      setBusy(false)
-    }
-  }
-
-  async function savePocketFile() {
-    if (pocketFiles.length === 0 || busy) return
-    setBusy(true); setMsg('Importing Pocket links…'); setPocketFailures([])
-    try {
-      const formData = new FormData()
-      for (const file of pocketFiles) formData.append('files', file)
-      const res = await fetch('/api/import/pocket', {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await res.json().catch(() => null) as unknown
-      if (!res.ok) {
-        const failures = pocketImportFailures(data)
-        setPocketFailures(failures)
-        setMsg(apiError(data, 'Could not import that Pocket CSV export. Use a Pocket CSV file with URL and title columns.'))
-        setBusy(false)
-        return
-      }
-      if (!isPocketImportResponse(data)) {
-        setMsg('The local Pocket import API returned an unexpected response. Try again, or restart Recall.')
-        setBusy(false)
-        return
-      }
-      const importedCards = data.cards.filter(card => !card.skipped)
-      if (data.failures.length > 0) {
-        setPocketFailures(data.failures)
-      }
-      if (importedCards.length > 0) {
-        setMsg('Summarizing imported Pocket links with the local model…')
-        fetch('/api/enrich', { method: 'POST' }).catch(() => {})
-      }
-      const firstCard = data.cards[0]
-      onSaved(firstCard.id, {
-        kind: 'pocket',
-        status: firstCard.status,
-        extracted: false,
-        skipped: data.imported === 0 && data.skipped > 0,
-        message: pocketImportMessage(data),
-      })
-      reset()
-    } catch {
-      setMsg('Could not reach the local Pocket import API. Check that Recall is still running, then try again.')
-      setBusy(false)
-    }
-  }
-
-  async function saveSocialBookmarksFile() {
-    if (socialBookmarkFiles.length === 0 || busy) return
-    setBusy(true); setMsg('Importing Social Bookmarks…'); setSocialBookmarkFailures([])
-    try {
-      const formData = new FormData()
-      for (const file of socialBookmarkFiles) formData.append('files', file)
-      const res = await fetch('/api/import/social-bookmarks', {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await res.json().catch(() => null) as unknown
-      if (!res.ok) {
-        const failures = socialBookmarksImportFailures(data)
-        setSocialBookmarkFailures(failures)
-        setMsg(apiError(data, 'Could not import that Social Bookmarks Triage JSON export. Use a JSON export or bookmarklet file.'))
-        setBusy(false)
-        return
-      }
-      if (!isSocialBookmarksImportResponse(data)) {
-        setMsg('The local Social Bookmarks import API returned an unexpected response. Try again, or restart Recall.')
-        setBusy(false)
-        return
-      }
-      const importedCards = data.cards.filter(card => !card.skipped)
-      if (data.failures.length > 0) {
-        setSocialBookmarkFailures(data.failures)
-      }
-      if (importedCards.length > 0) {
-        setMsg('Summarizing imported Social Bookmarks with the local model…')
-        fetch('/api/enrich', { method: 'POST' }).catch(() => {})
-      }
-      const firstCard = data.cards[0]
-      onSaved(firstCard.id, {
-        kind: 'social-bookmarks',
-        status: firstCard.status,
-        extracted: true,
-        skipped: data.imported === 0 && data.skipped > 0,
-        message: socialBookmarksImportMessage(data),
-      })
-      reset()
-    } catch {
-      setMsg('Could not reach the local Social Bookmarks import API. Check that Recall is still running, then try again.')
-      setBusy(false)
-    }
+  function setFailures(kind: ImportKind, failures: ImportFailure[]) {
+    setSelections(prev => ({ ...prev, [kind]: { ...prev[kind], failures } }))
   }
 
   function reset() {
-    setBusy(false); setMsg(null); setUrl(''); setNoteTitle(''); setNoteText(''); setWikiQuery(''); setWikiResults([]); setPdfFiles([]); setPdfFailures([]); setImageFiles([]); setImageFailures([]); setMarkdownFiles([]); setMarkdownFailures([]); setBookmarkFiles([]); setBookmarkFailures([]); setPocketFiles([]); setPocketFailures([]); setSocialBookmarkFiles([]); setSocialBookmarkFailures([])
-    if (pdfInputRef.current) pdfInputRef.current.value = ''
-    if (imageInputRef.current) imageInputRef.current.value = ''
-    if (markdownInputRef.current) markdownInputRef.current.value = ''
-    if (bookmarkInputRef.current) bookmarkInputRef.current.value = ''
-    if (pocketInputRef.current) pocketInputRef.current.value = ''
-    if (socialBookmarksInputRef.current) socialBookmarksInputRef.current.value = ''
-  }
-
-  function setPdfSelection(files: FileList | File[]) {
-    const selected = Array.from(files).filter(file => isPdfFile(file)).slice(0, MAX_PDF_IMPORT_FILES)
-    setPdfFiles(selected)
-    setPdfFailures([])
-    if (files.length > MAX_PDF_IMPORT_FILES) {
-      setMsg(`Import up to ${MAX_PDF_IMPORT_FILES} PDFs at a time.`)
-    } else if (selected.length !== files.length) {
-      setMsg('Only PDF files can be imported from this panel.')
-    } else {
-      setMsg(null)
+    setBusy(false); setMsg(null); setUrl(''); setNoteTitle(''); setNoteText(''); setWikiQuery(''); setWikiResults([])
+    setSelections(EMPTY_SELECTIONS)
+    for (const input of Object.values(inputRefs.current)) {
+      if (input) input.value = ''
     }
   }
 
-  function onPdfDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault()
-    if (busy) return
-    setPdfSelection(event.dataTransfer.files)
+  function setSelection(kind: ImportKind, files: FileList | File[]) {
+    const cfg = IMPORT_KINDS[kind]
+    const selected = Array.from(files).filter(cfg.matches).slice(0, cfg.max)
+    setSelections(prev => ({ ...prev, [kind]: { files: selected, failures: [] } }))
+    if (files.length > cfg.max) setMsg(cfg.tooManyMessage)
+    else if (selected.length !== files.length) setMsg(cfg.wrongTypeMessage)
+    else setMsg(null)
   }
 
-  function setImageSelection(files: FileList | File[]) {
-    const selected = Array.from(files).filter(file => isImageFile(file)).slice(0, MAX_IMAGE_IMPORT_FILES)
-    setImageFiles(selected)
-    setImageFailures([])
-    if (files.length > MAX_IMAGE_IMPORT_FILES) {
-      setMsg(`Import up to ${MAX_IMAGE_IMPORT_FILES} images at a time.`)
-    } else if (selected.length !== files.length) {
-      setMsg('Only PNG, JPG, or WebP images can be imported from this panel.')
-    } else {
-      setMsg(null)
-    }
-  }
-
-  function onImageDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault()
-    if (busy) return
-    setImageSelection(event.dataTransfer.files)
-  }
-
-  function setMarkdownSelection(files: FileList | File[]) {
-    const selected = Array.from(files).filter(file => isMarkdownFile(file)).slice(0, MAX_MARKDOWN_IMPORT_FILES)
-    setMarkdownFiles(selected)
-    setMarkdownFailures([])
-    if (files.length > MAX_MARKDOWN_IMPORT_FILES) {
-      setMsg(`Import up to ${MAX_MARKDOWN_IMPORT_FILES} Markdown files at a time.`)
-    } else if (selected.length !== files.length) {
-      setMsg('Only .md or .markdown files can be imported from this panel.')
-    } else {
-      setMsg(null)
-    }
-  }
-
-  function onMarkdownDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault()
-    if (busy) return
-    setMarkdownSelection(event.dataTransfer.files)
-  }
-
-  function setBookmarkSelection(files: FileList | File[]) {
-    const selected = Array.from(files).filter(file => isBookmarkHtmlFile(file)).slice(0, MAX_BOOKMARK_IMPORT_FILES)
-    setBookmarkFiles(selected)
-    setBookmarkFailures([])
-    if (files.length > MAX_BOOKMARK_IMPORT_FILES) {
-      setMsg('Import one browser bookmarks export at a time.')
-    } else if (selected.length !== files.length) {
-      setMsg('Only browser bookmark HTML exports can be imported from this panel.')
-    } else {
-      setMsg(null)
-    }
-  }
-
-  function onBookmarkDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault()
-    if (busy) return
-    setBookmarkSelection(event.dataTransfer.files)
-  }
-
-  function setPocketSelection(files: FileList | File[]) {
-    const selected = Array.from(files).filter(file => isPocketCsvFile(file)).slice(0, MAX_POCKET_IMPORT_FILES)
-    setPocketFiles(selected)
-    setPocketFailures([])
-    if (files.length > MAX_POCKET_IMPORT_FILES) {
-      setMsg('Import one Pocket CSV export at a time.')
-    } else if (selected.length !== files.length) {
-      setMsg('Only Pocket CSV exports can be imported from this panel.')
-    } else {
-      setMsg(null)
-    }
-  }
-
-  function onPocketDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault()
-    if (busy) return
-    setPocketSelection(event.dataTransfer.files)
-  }
-
-  function setSocialBookmarksSelection(files: FileList | File[]) {
-    const selected = Array.from(files).filter(file => isSocialBookmarksJsonFile(file)).slice(0, MAX_SOCIAL_BOOKMARKS_IMPORT_FILES)
-    setSocialBookmarkFiles(selected)
-    setSocialBookmarkFailures([])
-    if (files.length > MAX_SOCIAL_BOOKMARKS_IMPORT_FILES) {
-      setMsg('Import one Social Bookmarks Triage JSON export at a time.')
-    } else if (selected.length !== files.length) {
-      setMsg('Only Social Bookmarks Triage JSON exports can be imported from this panel.')
-    } else {
-      setMsg(null)
-    }
-  }
-
-  function onSocialBookmarksDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault()
-    if (busy) return
-    setSocialBookmarksSelection(event.dataTransfer.files)
+  function clearSelection(kind: ImportKind) {
+    setSelections(prev => ({ ...prev, [kind]: { files: [], failures: [] } }))
+    setMsg(null)
+    const input = inputRefs.current[kind]
+    if (input) input.value = ''
   }
 
   function focusTab(next: AddContentTab) {
     setTab(next)
-    window.setTimeout(() => document.getElementById(addTabId(next))?.focus(), 0)
+    window.setTimeout(() => document.getElementById(`add-source-tab-${next}`)?.focus(), 0)
   }
 
   function onTabKeyDown(e: ReactKeyboardEvent<HTMLButtonElement>, current: AddContentTab) {
@@ -652,6 +543,17 @@ export function AddContentModal({
     }
   }
 
+  const filePanel: FilePanelApi = {
+    selections,
+    busy,
+    message: msg,
+    registerInput: (kind, element) => { inputRefs.current[kind] = element },
+    openPicker: kind => inputRefs.current[kind]?.click(),
+    onSelect: setSelection,
+    onClear: clearSelection,
+    onImport: importFiles,
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-4 sm:pt-[8vh]"
@@ -661,7 +563,7 @@ export function AddContentModal({
       <div
         ref={dialogRef}
         className="rr-card w-full max-w-xl rr-rise"
-        style={{ borderRadius: 4, maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto' }}
+        style={{ maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto' }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-content-title"
@@ -678,32 +580,30 @@ export function AddContentModal({
           {TABS.map(t => (
             <button
               key={t.id}
-              id={addTabId(t.id)}
+              id={`add-source-tab-${t.id}`}
               type="button"
               role="tab"
               aria-selected={tab === t.id}
-              aria-controls={addPanelId(t.id)}
+              aria-controls={`add-source-panel-${t.id}`}
               tabIndex={tab === t.id ? 0 : -1}
               onClick={() => setTab(t.id)}
               onKeyDown={e => onTabKeyDown(e, t.id)}
               className="rr-mono pb-2 shrink-0"
               style={{
-                color: tab === t.id ? 'var(--accent)' : t.ready ? 'var(--sepia)' : 'var(--sepia-2)',
+                color: tab === t.id ? 'var(--accent)' : 'var(--sepia)',
                 borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-                opacity: t.ready ? 1 : 0.5,
                 cursor: 'pointer',
               }}
-              title={t.ready ? '' : `${t.label} capture is planned`}
             >
-              {t.label}{!t.ready && ' ·'}
+              {t.label}
             </button>
           ))}
         </div>
 
         <div
-          id={addPanelId(tab)}
+          id={`add-source-panel-${tab}`}
           role="tabpanel"
-          aria-labelledby={addTabId(tab)}
+          aria-labelledby={`add-source-tab-${tab}`}
           className="px-6 py-5"
         >
           {tab === 'url' && (
@@ -723,7 +623,6 @@ export function AddContentModal({
                 className="w-full bg-transparent px-3 py-2 outline-none rr-rule"
                 style={{ borderBottom: '1px solid var(--hairline)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
               />
-              <DefaultActionSelect />
               <p className="rr-prose" style={{ fontSize: '0.84rem' }}>
                 Private/local links are blocked. Use the PDF tab for local documents;
                 use Image for local PNG/JPG/WebP capture. Use the Wiki tab for topic capture;
@@ -760,7 +659,6 @@ export function AddContentModal({
                 className="w-full bg-transparent px-3 py-2 outline-none rr-prose"
                 style={{ borderBottom: '1px solid var(--hairline)', resize: 'vertical' }}
               />
-              <DefaultActionSelect />
               <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
                 <span className="rr-mono min-h-4">{msg}</span>
                 <button className="rr-btn rr-btn-accent" disabled={busy || (!noteText.trim() && !noteTitle.trim())} onClick={saveNote}>
@@ -781,108 +679,19 @@ export function AddContentModal({
               onImport={saveWiki}
             />
           )}
-          {tab === 'pdf' && (
-            <PdfPanel
-              files={pdfFiles}
-              failures={pdfFailures}
-              busy={busy}
-              message={msg}
-              inputRef={pdfInputRef}
-              onSelect={setPdfSelection}
-              onDrop={onPdfDrop}
-              onImport={savePdfs}
-              onClear={() => {
-                setPdfFiles([])
-                setPdfFailures([])
-                setMsg(null)
-                if (pdfInputRef.current) pdfInputRef.current.value = ''
-              }}
-            />
-          )}
-          {tab === 'image' && (
-            <ImagePanel
-              files={imageFiles}
-              failures={imageFailures}
-              busy={busy}
-              message={msg}
-              inputRef={imageInputRef}
-              onSelect={setImageSelection}
-              onDrop={onImageDrop}
-              onImport={saveImages}
-              onClear={() => {
-                setImageFiles([])
-                setImageFailures([])
-                setMsg(null)
-                if (imageInputRef.current) imageInputRef.current.value = ''
-              }}
-            />
-          )}
+          {tab === 'pdf' && <FilePanel kinds={['pdf']} api={filePanel} />}
+          {tab === 'image' && <FilePanel kinds={['image']} api={filePanel} />}
           {tab === 'import' && (
-            <ImportPanel
-              markdownFiles={markdownFiles}
-              markdownFailures={markdownFailures}
-              bookmarkFiles={bookmarkFiles}
-              bookmarkFailures={bookmarkFailures}
-              pocketFiles={pocketFiles}
-              pocketFailures={pocketFailures}
-              socialBookmarkFiles={socialBookmarkFiles}
-              socialBookmarkFailures={socialBookmarkFailures}
-              busy={busy}
-              message={msg}
-              markdownInputRef={markdownInputRef}
-              bookmarkInputRef={bookmarkInputRef}
-              pocketInputRef={pocketInputRef}
-              socialBookmarksInputRef={socialBookmarksInputRef}
-              onSelectMarkdown={setMarkdownSelection}
-              onDropMarkdown={onMarkdownDrop}
-              onImportMarkdown={saveMarkdownFiles}
-              onClearMarkdown={() => {
-                setMarkdownFiles([])
-                setMarkdownFailures([])
-                setMsg(null)
-                if (markdownInputRef.current) markdownInputRef.current.value = ''
-              }}
-              onSelectBookmarks={setBookmarkSelection}
-              onDropBookmarks={onBookmarkDrop}
-              onImportBookmarks={saveBookmarkFile}
-              onClearBookmarks={() => {
-                setBookmarkFiles([])
-                setBookmarkFailures([])
-                setMsg(null)
-                if (bookmarkInputRef.current) bookmarkInputRef.current.value = ''
-              }}
-              onSelectPocket={setPocketSelection}
-              onDropPocket={onPocketDrop}
-              onImportPocket={savePocketFile}
-              onClearPocket={() => {
-                setPocketFiles([])
-                setPocketFailures([])
-                setMsg(null)
-                if (pocketInputRef.current) pocketInputRef.current.value = ''
-              }}
-              onSelectSocialBookmarks={setSocialBookmarksSelection}
-              onDropSocialBookmarks={onSocialBookmarksDrop}
-              onImportSocialBookmarks={saveSocialBookmarksFile}
-              onClearSocialBookmarks={() => {
-                setSocialBookmarkFiles([])
-                setSocialBookmarkFailures([])
-                setMsg(null)
-                if (socialBookmarksInputRef.current) socialBookmarksInputRef.current.value = ''
-              }}
+            <FilePanel
+              kinds={IMPORT_TAB_KINDS}
+              api={filePanel}
+              intro="Import browser bookmark exports, Pocket CSV exports, Social Bookmarks Triage JSON, and Markdown archives as local cards."
             />
           )}
         </div>
       </div>
     </div>
   )
-}
-
-function addTabId(tab: AddContentTab): string {
-  return `add-source-tab-${tab}`
-}
-
-function addPanelId(tab: AddContentTab): string {
-  return `add-source-panel-${tab}`
 }
 
 function isString(value: unknown): value is string {
@@ -901,7 +710,7 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string'
 }
 
-type PdfImportCard = {
+type ImportCard = {
   id: string
   title: string
   status: SavedContentStatus
@@ -910,71 +719,16 @@ type PdfImportCard = {
   message?: string
 }
 
-type PdfImportFailure = {
+type ImportFailure = {
   name: string
   error: string
   status: number
 }
 
-type PdfImportResponse = {
+type ImportResponse = {
   ok: true
-  cards: PdfImportCard[]
-  failures: PdfImportFailure[]
-  imported: number
-  skipped: number
-  failed: number
-}
-
-type ImageImportCard = PdfImportCard
-type ImageImportFailure = PdfImportFailure
-type ImageImportResponse = {
-  ok: true
-  cards: ImageImportCard[]
-  failures: ImageImportFailure[]
-  imported: number
-  skipped: number
-  failed: number
-}
-
-type MarkdownImportCard = PdfImportCard
-type MarkdownImportFailure = PdfImportFailure
-type MarkdownImportResponse = {
-  ok: true
-  cards: MarkdownImportCard[]
-  failures: MarkdownImportFailure[]
-  imported: number
-  skipped: number
-  failed: number
-}
-
-type BookmarkImportCard = PdfImportCard
-type BookmarkImportFailure = PdfImportFailure
-type BookmarkImportResponse = {
-  ok: true
-  cards: BookmarkImportCard[]
-  failures: BookmarkImportFailure[]
-  imported: number
-  skipped: number
-  failed: number
-}
-
-type PocketImportCard = PdfImportCard
-type PocketImportFailure = PdfImportFailure
-type PocketImportResponse = {
-  ok: true
-  cards: PocketImportCard[]
-  failures: PocketImportFailure[]
-  imported: number
-  skipped: number
-  failed: number
-}
-
-type SocialBookmarksImportCard = PdfImportCard
-type SocialBookmarksImportFailure = PdfImportFailure
-type SocialBookmarksImportResponse = {
-  ok: true
-  cards: SocialBookmarksImportCard[]
-  failures: SocialBookmarksImportFailure[]
+  cards: ImportCard[]
+  failures: ImportFailure[]
   imported: number
   skipped: number
   failed: number
@@ -1000,133 +754,15 @@ type SavedContentResponse = {
   message?: string
 }
 
-function isPdfFile(file: File): boolean {
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-  return file.type === 'application/pdf' || extension === 'pdf'
-}
-
-function isImageFile(file: File): boolean {
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-  return file.type === 'image/png' ||
-    file.type === 'image/jpeg' ||
-    file.type === 'image/webp' ||
-    extension === 'png' ||
-    extension === 'jpg' ||
-    extension === 'jpeg' ||
-    extension === 'webp'
-}
-
-function isMarkdownFile(file: File): boolean {
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-  return extension === 'md' ||
-    extension === 'markdown' ||
-    file.type === 'text/markdown' ||
-    file.type === 'text/x-markdown'
-}
-
-function isBookmarkHtmlFile(file: File): boolean {
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-  return extension === 'html' ||
-    extension === 'htm' ||
-    file.type === 'text/html' ||
-    file.type === 'application/octet-stream'
-}
-
-function isPocketCsvFile(file: File): boolean {
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-  return extension === 'csv' ||
-    file.type === 'text/csv' ||
-    file.type === 'application/csv' ||
-    file.type === 'application/vnd.ms-excel' ||
-    file.type === 'application/octet-stream'
-}
-
-function isSocialBookmarksJsonFile(file: File): boolean {
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-  return extension === 'json' ||
-    file.type === 'application/json' ||
-    file.type === 'application/octet-stream'
-}
-
-function isPdfImportResponse(data: unknown): data is PdfImportResponse {
+function isImportResponse(data: unknown): data is ImportResponse {
   if (!data || typeof data !== 'object') return false
   const record = data as Record<string, unknown>
   return record.ok === true &&
     Array.isArray(record.cards) &&
     record.cards.length > 0 &&
-    record.cards.every(isPdfImportCard) &&
+    record.cards.every(isImportCard) &&
     Array.isArray(record.failures) &&
-    record.failures.every(isPdfImportFailure) &&
-    typeof record.imported === 'number' &&
-    typeof record.skipped === 'number' &&
-    typeof record.failed === 'number'
-}
-
-function isImageImportResponse(data: unknown): data is ImageImportResponse {
-  if (!data || typeof data !== 'object') return false
-  const record = data as Record<string, unknown>
-  return record.ok === true &&
-    Array.isArray(record.cards) &&
-    record.cards.length > 0 &&
-    record.cards.every(isPdfImportCard) &&
-    Array.isArray(record.failures) &&
-    record.failures.every(isPdfImportFailure) &&
-    typeof record.imported === 'number' &&
-    typeof record.skipped === 'number' &&
-    typeof record.failed === 'number'
-}
-
-function isMarkdownImportResponse(data: unknown): data is MarkdownImportResponse {
-  if (!data || typeof data !== 'object') return false
-  const record = data as Record<string, unknown>
-  return record.ok === true &&
-    Array.isArray(record.cards) &&
-    record.cards.length > 0 &&
-    record.cards.every(isPdfImportCard) &&
-    Array.isArray(record.failures) &&
-    record.failures.every(isPdfImportFailure) &&
-    typeof record.imported === 'number' &&
-    typeof record.skipped === 'number' &&
-    typeof record.failed === 'number'
-}
-
-function isBookmarkImportResponse(data: unknown): data is BookmarkImportResponse {
-  if (!data || typeof data !== 'object') return false
-  const record = data as Record<string, unknown>
-  return record.ok === true &&
-    Array.isArray(record.cards) &&
-    record.cards.length > 0 &&
-    record.cards.every(isPdfImportCard) &&
-    Array.isArray(record.failures) &&
-    record.failures.every(isPdfImportFailure) &&
-    typeof record.imported === 'number' &&
-    typeof record.skipped === 'number' &&
-    typeof record.failed === 'number'
-}
-
-function isPocketImportResponse(data: unknown): data is PocketImportResponse {
-  if (!data || typeof data !== 'object') return false
-  const record = data as Record<string, unknown>
-  return record.ok === true &&
-    Array.isArray(record.cards) &&
-    record.cards.length > 0 &&
-    record.cards.every(isPdfImportCard) &&
-    Array.isArray(record.failures) &&
-    record.failures.every(isPdfImportFailure) &&
-    typeof record.imported === 'number' &&
-    typeof record.skipped === 'number' &&
-    typeof record.failed === 'number'
-}
-
-function isSocialBookmarksImportResponse(data: unknown): data is SocialBookmarksImportResponse {
-  if (!data || typeof data !== 'object') return false
-  const record = data as Record<string, unknown>
-  return record.ok === true &&
-    Array.isArray(record.cards) &&
-    record.cards.length > 0 &&
-    record.cards.every(isPdfImportCard) &&
-    Array.isArray(record.failures) &&
-    record.failures.every(isPdfImportFailure) &&
+    record.failures.every(isImportFailure) &&
     typeof record.imported === 'number' &&
     typeof record.skipped === 'number' &&
     typeof record.failed === 'number'
@@ -1135,17 +771,13 @@ function isSocialBookmarksImportResponse(data: unknown): data is SocialBookmarks
 function isWikiSearchResponse(data: unknown): data is WikiSearchResponse {
   if (!data || typeof data !== 'object') return false
   const record = data as Record<string, unknown>
-  return record.ok === true &&
-    Array.isArray(record.results) &&
-    record.results.every(isWikiSearchResult)
+  return record.ok === true && Array.isArray(record.results) && record.results.every(isWikiSearchResult)
 }
 
 function isWikiSearchResult(value: unknown): value is WikiSearchResult {
   if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
-  return typeof record.title === 'string' &&
-    typeof record.description === 'string' &&
-    typeof record.url === 'string'
+  return isString(record.title) && typeof record.description === 'string' && typeof record.url === 'string'
 }
 
 function isSavedContentResponse(data: unknown): data is SavedContentResponse {
@@ -1153,13 +785,13 @@ function isSavedContentResponse(data: unknown): data is SavedContentResponse {
   const record = data as Record<string, unknown>
   return isString(record.bookmarkId) &&
     isSavedContentStatus(record.status) &&
+    isOptionalString(record.title) &&
     isOptionalBoolean(record.extracted) &&
     isOptionalBoolean(record.skipped) &&
-    isOptionalString(record.message) &&
-    isOptionalString(record.title)
+    isOptionalString(record.message)
 }
 
-function isPdfImportCard(value: unknown): value is PdfImportCard {
+function isImportCard(value: unknown): value is ImportCard {
   if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
   return isString(record.id) &&
@@ -1170,7 +802,7 @@ function isPdfImportCard(value: unknown): value is PdfImportCard {
     isOptionalString(record.message)
 }
 
-function isPdfImportFailure(value: unknown): value is PdfImportFailure {
+function isImportFailure(value: unknown): value is ImportFailure {
   if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
   return typeof record.name === 'string' &&
@@ -1178,116 +810,28 @@ function isPdfImportFailure(value: unknown): value is PdfImportFailure {
     typeof record.status === 'number'
 }
 
-function pdfImportFailures(data: unknown): PdfImportFailure[] {
+function importFailures(data: unknown): ImportFailure[] {
   if (!data || typeof data !== 'object') return []
   const failures = (data as Record<string, unknown>).failures
-  return Array.isArray(failures) ? failures.filter(isPdfImportFailure) : []
+  return Array.isArray(failures) ? failures.filter(isImportFailure) : []
 }
 
-function imageImportFailures(data: unknown): ImageImportFailure[] {
-  return pdfImportFailures(data)
+
+function plural(cfg: ImportKindConfig, count: number): string {
+  return count === 1 ? cfg.unit[0] : cfg.unit[1]
 }
 
-function markdownImportFailures(data: unknown): MarkdownImportFailure[] {
-  return pdfImportFailures(data)
-}
-
-function bookmarkImportFailures(data: unknown): BookmarkImportFailure[] {
-  return pdfImportFailures(data)
-}
-
-function pocketImportFailures(data: unknown): PocketImportFailure[] {
-  return pdfImportFailures(data)
-}
-
-function socialBookmarksImportFailures(data: unknown): SocialBookmarksImportFailure[] {
-  return pdfImportFailures(data)
-}
-
-function apiError(data: unknown, fallback: string): string {
-  if (data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string') {
-    return (data as { error: string }).error
-  }
-  return fallback
-}
-
-function pdfImportMessage(data: PdfImportResponse): string {
-  const imported = data.imported
-  const skipped = data.skipped
-  const failed = data.failed
+function importMessage(cfg: ImportKindConfig, data: ImportResponse): string {
+  const { imported, skipped, failed } = data
   const parts: string[] = []
-  if (imported > 0) parts.push(`${imported} ${imported === 1 ? 'PDF' : 'PDFs'} imported`)
+  if (imported > 0) parts.push(`${imported} ${plural(cfg, imported)} imported`)
   if (skipped > 0) parts.push(`${skipped} already in library`)
   if (failed > 0) parts.push(`${failed} failed`)
-  if (parts.length === 0) return 'No PDFs were imported.'
-  return `${parts.join(' · ')}. ${imported > 0 ? 'Summarizing on your local model…' : ''}`.trim()
-}
-
-function imageImportMessage(data: ImageImportResponse): string {
-  const imported = data.imported
-  const skipped = data.skipped
-  const failed = data.failed
-  const extracted = data.cards.filter(card => !card.skipped && card.extracted).length
-  const savedWithoutText = data.cards.filter(card => !card.skipped && !card.extracted).length
-  const parts: string[] = []
-  if (imported > 0) parts.push(`${imported} ${imported === 1 ? 'image' : 'images'} imported`)
-  if (skipped > 0) parts.push(`${skipped} already in library`)
-  if (failed > 0) parts.push(`${failed} failed`)
-  if (parts.length === 0) return 'No images were imported.'
-  const suffix = extracted > 0
-    ? 'Summarizing OCR/vision text on your local model…'
-    : savedWithoutText > 0
-      ? 'Saved locally; OCR/vision is unavailable.'
-      : ''
+  if (parts.length === 0) return `No ${cfg.unit[1]} were imported.`
+  const suffix = cfg.messageSuffix
+    ? cfg.messageSuffix(data)
+    : imported > 0 ? 'Summarizing on your local model…' : ''
   return `${parts.join(' · ')}. ${suffix}`.trim()
-}
-
-function markdownImportMessage(data: MarkdownImportResponse): string {
-  const imported = data.imported
-  const skipped = data.skipped
-  const failed = data.failed
-  const parts: string[] = []
-  if (imported > 0) parts.push(`${imported} Markdown ${imported === 1 ? 'file' : 'files'} imported`)
-  if (skipped > 0) parts.push(`${skipped} already in library`)
-  if (failed > 0) parts.push(`${failed} failed`)
-  if (parts.length === 0) return 'No Markdown files were imported.'
-  return `${parts.join(' · ')}. ${imported > 0 ? 'Summarizing on your local model…' : ''}`.trim()
-}
-
-function bookmarkImportMessage(data: BookmarkImportResponse): string {
-  const imported = data.imported
-  const skipped = data.skipped
-  const failed = data.failed
-  const parts: string[] = []
-  if (imported > 0) parts.push(`${imported} browser ${imported === 1 ? 'bookmark' : 'bookmarks'} imported`)
-  if (skipped > 0) parts.push(`${skipped} already in library`)
-  if (failed > 0) parts.push(`${failed} failed`)
-  if (parts.length === 0) return 'No browser bookmarks were imported.'
-  return `${parts.join(' · ')}. ${imported > 0 ? 'Summarizing on your local model…' : ''}`.trim()
-}
-
-function pocketImportMessage(data: PocketImportResponse): string {
-  const imported = data.imported
-  const skipped = data.skipped
-  const failed = data.failed
-  const parts: string[] = []
-  if (imported > 0) parts.push(`${imported} Pocket ${imported === 1 ? 'link' : 'links'} imported`)
-  if (skipped > 0) parts.push(`${skipped} already in library`)
-  if (failed > 0) parts.push(`${failed} failed`)
-  if (parts.length === 0) return 'No Pocket links were imported.'
-  return `${parts.join(' · ')}. ${imported > 0 ? 'Summarizing on your local model…' : ''}`.trim()
-}
-
-function socialBookmarksImportMessage(data: SocialBookmarksImportResponse): string {
-  const imported = data.imported
-  const skipped = data.skipped
-  const failed = data.failed
-  const parts: string[] = []
-  if (imported > 0) parts.push(`${imported} Social Bookmarks ${imported === 1 ? 'item' : 'items'} imported`)
-  if (skipped > 0) parts.push(`${skipped} already in library`)
-  if (failed > 0) parts.push(`${failed} failed`)
-  if (parts.length === 0) return 'No Social Bookmarks items were imported.'
-  return `${parts.join(' · ')}. ${imported > 0 ? 'Summarizing on your local model…' : ''}`.trim()
 }
 
 function WikiPanel({
@@ -1325,7 +869,6 @@ function WikiPanel({
           style={{ borderBottom: '1px solid var(--hairline)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
         />
       </label>
-      <DefaultActionSelect />
       {results.length > 0 && (
         <div className="grid gap-2" aria-label="Wikipedia topic results">
           {results.map(result => (
@@ -1333,7 +876,7 @@ function WikiPanel({
               key={`${result.title}-${result.url}`}
               type="button"
               className="rr-card px-4 py-3 text-left"
-              style={{ borderRadius: 3 }}
+             
               disabled={busy}
               onClick={() => onImport(result.title)}
               aria-label={`Import Wikipedia topic ${result.title}`}
@@ -1372,553 +915,113 @@ function WikiPanel({
   )
 }
 
-function PdfPanel({
-  files,
-  failures,
-  busy,
-  message,
-  inputRef,
-  onSelect,
-  onDrop,
-  onImport,
-  onClear,
-}: {
-  files: File[]
-  failures: PdfImportFailure[]
+type FilePanelApi = {
+  selections: Record<ImportKind, Selection>
   busy: boolean
   message: string | null
-  inputRef: React.RefObject<HTMLInputElement | null>
-  onSelect: (files: FileList | File[]) => void
-  onDrop: (event: DragEvent<HTMLDivElement>) => void
-  onImport: () => void
-  onClear: () => void
-}) {
-  return (
-    <div className="space-y-4" aria-live="polite">
-      <div
-        className="rr-card flex min-h-36 flex-col items-center justify-center px-4 py-6 text-center"
-        style={{ borderRadius: 3, borderStyle: 'dashed' }}
-        onDragOver={event => event.preventDefault()}
-        onDrop={onDrop}
-      >
-        <Upload size={22} aria-hidden="true" style={{ color: 'var(--accent)', strokeWidth: 1.7 }} />
-        <p className="font-display mt-3" style={{ fontSize: '1.05rem' }}>Drop PDFs here</p>
-        <p className="rr-prose mt-1" style={{ fontSize: '0.9rem' }}>Choose up to 10 PDFs. Selectable text imports directly; scanned PDFs use local OCR/vision.</p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".pdf,application/pdf"
-          multiple
-          className="sr-only"
-          aria-label="Choose PDF files"
-          onChange={event => {
-            if (event.currentTarget.files) onSelect(event.currentTarget.files)
-          }}
-        />
-        <button
-          className="rr-btn mt-4"
-          disabled={busy}
-          aria-label="Choose PDF files"
-          title="Choose up to 10 PDFs to save as local document cards."
-          onClick={() => inputRef.current?.click()}
-          type="button"
-        >
-          Choose PDFs
-        </button>
-      </div>
-      {files.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <div className="flex items-center justify-between gap-3">
-            <p className="rr-mono">{files.length} selected {files.length === 1 ? 'PDF' : 'PDFs'}</p>
-            <button className="rr-link rr-mono" type="button" onClick={onClear} disabled={busy}>Clear</button>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2" aria-label="Selected PDF files">
-            {files.map(file => (
-              <span key={`${file.name}-${file.size}-${file.lastModified}`} className="rr-tag">
-                {file.name} · {formatFileSize(file.size)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      <DefaultActionSelect />
-      {failures.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <p className="rr-mono" style={{ color: 'var(--accent)' }}>PDF import issues</p>
-          <ul className="mt-2 space-y-1 rr-prose" style={{ fontSize: '0.9rem' }}>
-            {failures.map(failure => (
-              <li key={`${failure.name}-${failure.error}`}>{failure.name}: {failure.error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-        <span className="rr-mono min-h-4">{message}</span>
-        <button
-          className="rr-btn rr-btn-accent"
-          disabled={busy || files.length === 0}
-          onClick={onImport}
-          type="button"
-        >
-          {busy ? 'Importing…' : 'Import PDFs'}
-        </button>
-      </div>
-    </div>
-  )
+  registerInput: (kind: ImportKind, element: HTMLInputElement | null) => void
+  openPicker: (kind: ImportKind) => void
+  onSelect: (kind: ImportKind, files: FileList | File[]) => void
+  onClear: (kind: ImportKind) => void
+  onImport: (kind: ImportKind) => void
 }
 
-function ImagePanel({
-  files,
-  failures,
-  busy,
-  message,
-  inputRef,
-  onSelect,
-  onDrop,
-  onImport,
-  onClear,
-}: {
-  files: File[]
-  failures: ImageImportFailure[]
-  busy: boolean
-  message: string | null
-  inputRef: React.RefObject<HTMLInputElement | null>
-  onSelect: (files: FileList | File[]) => void
-  onDrop: (event: DragEvent<HTMLDivElement>) => void
-  onImport: () => void
-  onClear: () => void
-}) {
+function FilePanel({ kinds, api, intro }: { kinds: ImportKind[]; api: FilePanelApi; intro?: string }) {
   return (
     <div className="space-y-4" aria-live="polite">
-      <div
-        className="rr-card flex min-h-36 flex-col items-center justify-center px-4 py-6 text-center"
-        style={{ borderRadius: 3, borderStyle: 'dashed' }}
-        onDragOver={event => event.preventDefault()}
-        onDrop={onDrop}
-      >
-        <ImageIcon size={22} aria-hidden="true" style={{ color: 'var(--accent)', strokeWidth: 1.7 }} />
-        <p className="font-display mt-3" style={{ fontSize: '1.05rem' }}>Drop images here</p>
-        <p className="rr-prose mt-1" style={{ fontSize: '0.9rem' }}>Choose up to 10 PNG, JPG, or WebP images. Recall saves the image locally and extracts OCR/vision text when the local model is available.</p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-          multiple
-          className="sr-only"
-          aria-label="Choose image files"
-          onChange={event => {
-            if (event.currentTarget.files) onSelect(event.currentTarget.files)
-          }}
-        />
-        <button
-          className="rr-btn mt-4"
-          disabled={busy}
-          aria-label="Choose image files"
-          title="Choose up to 10 images to save as local media cards."
-          onClick={() => inputRef.current?.click()}
-          type="button"
-        >
-          Choose images
-        </button>
-      </div>
-      {files.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <div className="flex items-center justify-between gap-3">
-            <p className="rr-mono">{files.length} selected {files.length === 1 ? 'image' : 'images'}</p>
-            <button className="rr-link rr-mono" type="button" onClick={onClear} disabled={busy}>Clear</button>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2" aria-label="Selected image files">
-            {files.map(file => (
-              <span key={`${file.name}-${file.size}-${file.lastModified}`} className="rr-tag">
-                {file.name} · {formatFileSize(file.size)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      <DefaultActionSelect />
-      {failures.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <p className="rr-mono" style={{ color: 'var(--accent)' }}>Image import issues</p>
-          <ul className="mt-2 space-y-1 rr-prose" style={{ fontSize: '0.9rem' }}>
-            {failures.map(failure => (
-              <li key={`${failure.name}-${failure.error}`}>{failure.name}: {failure.error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-        <span className="rr-mono min-h-4">{message}</span>
-        <button
-          className="rr-btn rr-btn-accent"
-          disabled={busy || files.length === 0}
-          onClick={onImport}
-          type="button"
-        >
-          {busy ? 'Importing…' : 'Import images'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function formatFileSize(size: number): string {
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function ImportPanel({
-  markdownFiles,
-  markdownFailures,
-  bookmarkFiles,
-  bookmarkFailures,
-  pocketFiles,
-  pocketFailures,
-  socialBookmarkFiles,
-  socialBookmarkFailures,
-  busy,
-  message,
-  markdownInputRef,
-  bookmarkInputRef,
-  pocketInputRef,
-  socialBookmarksInputRef,
-  onSelectMarkdown,
-  onDropMarkdown,
-  onImportMarkdown,
-  onClearMarkdown,
-  onSelectBookmarks,
-  onDropBookmarks,
-  onImportBookmarks,
-  onClearBookmarks,
-  onSelectPocket,
-  onDropPocket,
-  onImportPocket,
-  onClearPocket,
-  onSelectSocialBookmarks,
-  onDropSocialBookmarks,
-  onImportSocialBookmarks,
-  onClearSocialBookmarks,
-}: {
-  markdownFiles: File[]
-  markdownFailures: MarkdownImportFailure[]
-  bookmarkFiles: File[]
-  bookmarkFailures: BookmarkImportFailure[]
-  pocketFiles: File[]
-  pocketFailures: PocketImportFailure[]
-  socialBookmarkFiles: File[]
-  socialBookmarkFailures: SocialBookmarksImportFailure[]
-  busy: boolean
-  message: string | null
-  markdownInputRef: React.RefObject<HTMLInputElement | null>
-  bookmarkInputRef: React.RefObject<HTMLInputElement | null>
-  pocketInputRef: React.RefObject<HTMLInputElement | null>
-  socialBookmarksInputRef: React.RefObject<HTMLInputElement | null>
-  onSelectMarkdown: (files: FileList | File[]) => void
-  onDropMarkdown: (event: DragEvent<HTMLDivElement>) => void
-  onImportMarkdown: () => void
-  onClearMarkdown: () => void
-  onSelectBookmarks: (files: FileList | File[]) => void
-  onDropBookmarks: (event: DragEvent<HTMLDivElement>) => void
-  onImportBookmarks: () => void
-  onClearBookmarks: () => void
-  onSelectPocket: (files: FileList | File[]) => void
-  onDropPocket: (event: DragEvent<HTMLDivElement>) => void
-  onImportPocket: () => void
-  onClearPocket: () => void
-  onSelectSocialBookmarks: (files: FileList | File[]) => void
-  onDropSocialBookmarks: (event: DragEvent<HTMLDivElement>) => void
-  onImportSocialBookmarks: () => void
-  onClearSocialBookmarks: () => void
-}) {
-  return (
-    <div className="space-y-4" aria-live="polite">
-      <p className="rr-prose" style={{ fontSize: '0.92rem' }}>
-        Import browser bookmark exports, Pocket CSV exports, Social Bookmarks Triage JSON, and Markdown archives as local cards.
-      </p>
-      <div
-        className="rr-card flex min-h-32 flex-col items-center justify-center px-4 py-5 text-center"
-        style={{ borderRadius: 3, borderStyle: 'dashed' }}
-        onDragOver={event => event.preventDefault()}
-        onDrop={onDropBookmarks}
-      >
-        <BookOpen size={22} aria-hidden="true" style={{ color: 'var(--accent)', strokeWidth: 1.7 }} />
-        <p className="font-display mt-3" style={{ fontSize: '1.05rem' }}>Drop browser bookmarks HTML here</p>
-        <p className="rr-prose mt-1" style={{ fontSize: '0.9rem' }}>Choose one Chrome, Firefox, or Edge bookmarks export. Recall imports public http(s) links, preserves folder paths, and skips duplicates.</p>
-        <input
-          ref={bookmarkInputRef}
-          type="file"
-          accept=".html,.htm,text/html"
-          className="sr-only"
-          aria-label="Browser bookmarks file chooser"
-          onChange={event => {
-            if (event.currentTarget.files) onSelectBookmarks(event.currentTarget.files)
-          }}
-        />
-        <button
-          className="rr-btn mt-4"
-          disabled={busy}
-          aria-label="Choose browser bookmarks file"
-          title="Choose one Chrome, Firefox, or Edge bookmarks HTML export."
-          onClick={() => bookmarkInputRef.current?.click()}
-          type="button"
-        >
-          Choose bookmarks
-        </button>
-      </div>
-      {bookmarkFiles.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <div className="flex items-center justify-between gap-3">
-            <p className="rr-mono">1 selected bookmarks export</p>
-            <button className="rr-link rr-mono" type="button" onClick={onClearBookmarks} disabled={busy}>Clear</button>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2" aria-label="Selected browser bookmarks files">
-            {bookmarkFiles.map(file => (
-              <span key={`${file.name}-${file.size}-${file.lastModified}`} className="rr-tag">
-                {file.name} · {formatFileSize(file.size)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      {bookmarkFailures.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <p className="rr-mono" style={{ color: 'var(--accent)' }}>Browser bookmarks import issues</p>
-          <ul className="mt-2 space-y-1 rr-prose" style={{ fontSize: '0.9rem' }}>
-            {bookmarkFailures.map(failure => (
-              <li key={`${failure.name}-${failure.error}`}>{failure.name}: {failure.error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div
-        className="rr-card flex min-h-36 flex-col items-center justify-center px-4 py-6 text-center"
-        style={{ borderRadius: 3, borderStyle: 'dashed' }}
-        onDragOver={event => event.preventDefault()}
-        onDrop={onDropMarkdown}
-      >
-        <FileText size={22} aria-hidden="true" style={{ color: 'var(--accent)', strokeWidth: 1.7 }} />
-        <p className="font-display mt-3" style={{ fontSize: '1.05rem' }}>Drop Markdown files here</p>
-        <p className="rr-prose mt-1" style={{ fontSize: '0.9rem' }}>Choose up to 10 `.md` or `.markdown` files. Recall stores the original Markdown as Reader text and summarizes it locally.</p>
-        <input
-          ref={markdownInputRef}
-          type="file"
-          accept=".md,.markdown,text/markdown,text/x-markdown"
-          multiple
-          className="sr-only"
-          aria-label="Markdown file chooser"
-          onChange={event => {
-            if (event.currentTarget.files) onSelectMarkdown(event.currentTarget.files)
-          }}
-        />
-        <button
-          className="rr-btn mt-4"
-          disabled={busy}
-          aria-label="Choose Markdown files"
-          title="Choose up to 10 Markdown files to save as local document cards."
-          onClick={() => markdownInputRef.current?.click()}
-          type="button"
-        >
-          Choose Markdown
-        </button>
-      </div>
-      {markdownFiles.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <div className="flex items-center justify-between gap-3">
-            <p className="rr-mono">{markdownFiles.length} selected Markdown {markdownFiles.length === 1 ? 'file' : 'files'}</p>
-            <button className="rr-link rr-mono" type="button" onClick={onClearMarkdown} disabled={busy}>Clear</button>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2" aria-label="Selected Markdown files">
-            {markdownFiles.map(file => (
-              <span key={`${file.name}-${file.size}-${file.lastModified}`} className="rr-tag">
-                {file.name} · {formatFileSize(file.size)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      <DefaultActionSelect />
-      {markdownFailures.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <p className="rr-mono" style={{ color: 'var(--accent)' }}>Markdown import issues</p>
-          <ul className="mt-2 space-y-1 rr-prose" style={{ fontSize: '0.9rem' }}>
-            {markdownFailures.map(failure => (
-              <li key={`${failure.name}-${failure.error}`}>{failure.name}: {failure.error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div
-        className="rr-card flex min-h-32 flex-col items-center justify-center px-4 py-5 text-center"
-        style={{ borderRadius: 3, borderStyle: 'dashed' }}
-        onDragOver={event => event.preventDefault()}
-        onDrop={onDropPocket}
-      >
-        <FileArchive size={22} aria-hidden="true" style={{ color: 'var(--accent)', strokeWidth: 1.7 }} />
-        <p className="font-display mt-3" style={{ fontSize: '1.05rem' }}>Drop Pocket CSV here</p>
-        <p className="rr-prose mt-1" style={{ fontSize: '0.9rem' }}>Choose one Pocket export CSV. Recall imports public links, preserves Pocket tags/status metadata, and skips duplicates.</p>
-        <input
-          ref={pocketInputRef}
-          type="file"
-          accept=".csv,text/csv,application/csv,application/vnd.ms-excel"
-          className="sr-only"
-          aria-label="Pocket CSV file chooser"
-          onChange={event => {
-            if (event.currentTarget.files) onSelectPocket(event.currentTarget.files)
-          }}
-        />
-        <button
-          className="rr-btn mt-4"
-          disabled={busy}
-          aria-label="Choose Pocket CSV file"
-          title="Choose one Pocket CSV export."
-          onClick={() => pocketInputRef.current?.click()}
-          type="button"
-        >
-          Choose Pocket CSV
-        </button>
-      </div>
-      {pocketFiles.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <div className="flex items-center justify-between gap-3">
-            <p className="rr-mono">1 selected Pocket CSV</p>
-            <button className="rr-link rr-mono" type="button" onClick={onClearPocket} disabled={busy}>Clear</button>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2" aria-label="Selected Pocket CSV files">
-            {pocketFiles.map(file => (
-              <span key={`${file.name}-${file.size}-${file.lastModified}`} className="rr-tag">
-                {file.name} · {formatFileSize(file.size)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      {pocketFailures.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <p className="rr-mono" style={{ color: 'var(--accent)' }}>Pocket import issues</p>
-          <ul className="mt-2 space-y-1 rr-prose" style={{ fontSize: '0.9rem' }}>
-            {pocketFailures.map(failure => (
-              <li key={`${failure.name}-${failure.error}`}>{failure.name}: {failure.error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div
-        className="rr-card flex min-h-32 flex-col items-center justify-center px-4 py-5 text-center"
-        style={{ borderRadius: 3, borderStyle: 'dashed' }}
-        onDragOver={event => event.preventDefault()}
-        onDrop={onDropSocialBookmarks}
-      >
-        <FileJson size={22} aria-hidden="true" style={{ color: 'var(--accent)', strokeWidth: 1.7 }} />
-        <p className="font-display mt-3" style={{ fontSize: '1.05rem' }}>Drop Social Bookmarks JSON here</p>
-        <p className="rr-prose mt-1" style={{ fontSize: '0.9rem' }}>Choose one Social Bookmarks Triage JSON export or bookmarklet file. Recall preserves social source metadata, categories, semantic tags, actionability, and media references.</p>
-        <input
-          ref={socialBookmarksInputRef}
-          type="file"
-          accept=".json,application/json"
-          className="sr-only"
-          aria-label="Social Bookmarks JSON file chooser"
-          onChange={event => {
-            if (event.currentTarget.files) onSelectSocialBookmarks(event.currentTarget.files)
-          }}
-        />
-        <button
-          className="rr-btn mt-4"
-          disabled={busy}
-          aria-label="Choose Social Bookmarks JSON file"
-          title="Choose one Social Bookmarks Triage JSON export or bookmarklet file."
-          onClick={() => socialBookmarksInputRef.current?.click()}
-          type="button"
-        >
-          Choose Social JSON
-        </button>
-      </div>
-      {socialBookmarkFiles.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <div className="flex items-center justify-between gap-3">
-            <p className="rr-mono">1 selected Social Bookmarks JSON</p>
-            <button className="rr-link rr-mono" type="button" onClick={onClearSocialBookmarks} disabled={busy}>Clear</button>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2" aria-label="Selected Social Bookmarks JSON files">
-            {socialBookmarkFiles.map(file => (
-              <span key={`${file.name}-${file.size}-${file.lastModified}`} className="rr-tag">
-                {file.name} · {formatFileSize(file.size)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      {socialBookmarkFailures.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
-          <p className="rr-mono" style={{ color: 'var(--accent)' }}>Social Bookmarks import issues</p>
-          <ul className="mt-2 space-y-1 rr-prose" style={{ fontSize: '0.9rem' }}>
-            {socialBookmarkFailures.map(failure => (
-              <li key={`${failure.name}-${failure.error}`}>{failure.name}: {failure.error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {intro && <p className="rr-prose" style={{ fontSize: '0.92rem' }}>{intro}</p>}
+      {kinds.map(kind => <ImportSection key={kind} kind={kind} api={api} />)}
       <div className="flex flex-col gap-2 pt-1 lg:flex-row lg:items-center lg:justify-between">
-        <span className="rr-mono min-h-4">{message}</span>
+        <span className="rr-mono min-h-4">{api.message}</span>
         <div className="flex flex-wrap gap-2 lg:justify-end">
-          <button
-            className="rr-btn"
-            disabled={busy || bookmarkFiles.length === 0}
-            onClick={onImportBookmarks}
-            type="button"
-          >
-            {busy ? 'Importing…' : 'Import bookmarks'}
-          </button>
-          <button
-            className="rr-btn"
-            disabled={busy || pocketFiles.length === 0}
-            onClick={onImportPocket}
-            type="button"
-          >
-            {busy ? 'Importing…' : 'Import Pocket'}
-          </button>
-          <button
-            className="rr-btn"
-            disabled={busy || socialBookmarkFiles.length === 0}
-            onClick={onImportSocialBookmarks}
-            type="button"
-          >
-            {busy ? 'Importing…' : 'Import Social Bookmarks'}
-          </button>
-          <button
-            className="rr-btn rr-btn-accent"
-            disabled={busy || markdownFiles.length === 0}
-            onClick={onImportMarkdown}
-            type="button"
-          >
-            {busy ? 'Importing…' : 'Import Markdown'}
-          </button>
+          {kinds.map((kind, index) => (
+            <button
+              key={kind}
+              className={index === kinds.length - 1 ? 'rr-btn rr-btn-accent' : 'rr-btn'}
+              disabled={api.busy || api.selections[kind].files.length === 0}
+              onClick={() => api.onImport(kind)}
+              type="button"
+            >
+              {api.busy ? 'Importing…' : IMPORT_KINDS[kind].importLabel}
+            </button>
+          ))}
         </div>
       </div>
     </div>
   )
 }
 
-function DefaultActionSelect({ disabled = false }: { disabled?: boolean }) {
+function ImportSection({ kind, api }: { kind: ImportKind; api: FilePanelApi }) {
+  const cfg = IMPORT_KINDS[kind]
+  const { files, failures } = api.selections[kind]
+  const Icon = cfg.icon
+  const multiple = cfg.max > 1
+
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    if (api.busy) return
+    api.onSelect(kind, event.dataTransfer.files)
+  }
+
   return (
-    <label className="block rr-rule py-2">
-      <span className="rr-mono">Default action</span>
-      <select
-        aria-label={disabled ? 'Default AI action (planned)' : 'Default AI action'}
-        title={disabled ? 'Only concise Notebook summaries are active in Phase 1.' : undefined}
-        value="concise-summary"
-        disabled={disabled}
-        className="rr-select mt-2 w-full"
-        onChange={() => {}}
+    <>
+      <div
+        className={`rr-card flex flex-col items-center justify-center px-4 text-center ${cfg.tall ? 'min-h-36 py-6' : 'min-h-32 py-5'}`}
+        style={{ borderRadius: 6, borderStyle: 'dashed' }}
+        onDragOver={event => event.preventDefault()}
+        onDrop={onDrop}
       >
-        <option value="concise-summary">Concise summary</option>
-        <option value="detailed-summary" disabled>Detailed summary · Phase 2</option>
-        <option value="quiz" disabled>Generate quiz · Phase 3</option>
-        <option value="connections" disabled>Find connections · Phase 2</option>
-      </select>
-      <span className="rr-prose mt-1 block" style={{ fontSize: '0.84rem' }}>
-        Recall creates a Notebook TL;DR, key points, reader text, and tags when local extraction succeeds.
-      </span>
-    </label>
+        <Icon size={22} aria-hidden="true" style={{ color: 'var(--accent)', strokeWidth: 1.7 }} />
+        <p className="font-display mt-3" style={{ fontSize: '1.05rem' }}>{cfg.dropTitle}</p>
+        <p className="rr-prose mt-1" style={{ fontSize: '0.9rem' }}>{cfg.dropHelp}</p>
+        <input
+          ref={element => api.registerInput(kind, element)}
+          type="file"
+          accept={cfg.accept}
+          multiple={multiple}
+          className="sr-only"
+          aria-label={cfg.chooseAria}
+          onChange={event => {
+            if (event.currentTarget.files) api.onSelect(kind, event.currentTarget.files)
+          }}
+        />
+        <button
+          className="rr-btn mt-4"
+          disabled={api.busy}
+          aria-label={cfg.chooseAria}
+          title={cfg.chooseTitle}
+          onClick={() => api.openPicker(kind)}
+          type="button"
+        >
+          {cfg.chooseLabel}
+        </button>
+      </div>
+      {files.length > 0 && (
+        <div className="rr-card p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="rr-mono">{files.length} selected {cfg.selectedNoun ?? plural(cfg, files.length)}</p>
+            <button className="rr-link rr-mono" type="button" onClick={() => api.onClear(kind)} disabled={api.busy}>Clear</button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2" aria-label={`Selected ${cfg.fileNoun} files`}>
+            {files.map(file => (
+              <span key={`${file.name}-${file.size}-${file.lastModified}`} className="rr-tag">
+                {file.name} · {formatFileSize(file.size)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {failures.length > 0 && (
+        <div className="rr-card p-3">
+          <p className="rr-mono" style={{ color: 'var(--accent)' }}>{cfg.issuesLabel} import issues</p>
+          <ul className="mt-2 space-y-1 rr-prose" style={{ fontSize: '0.9rem' }}>
+            {failures.map(failure => (
+              <li key={`${failure.name}-${failure.error}`}>{failure.name}: {failure.error}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   )
 }
+

@@ -5,6 +5,7 @@ import { indexBookmark } from '@/lib/fts'
 import { extractImageTextForImport, ImageVisionError, MAX_IMPORT_IMAGE_BYTES, savedImageMimeType } from '@/lib/image-vision'
 import { extensionForImageMime, mediaLocalPath, saveMediaFile } from '@/lib/media-storage'
 import { apiError } from '@/lib/api-errors'
+import { cardTitle } from '@/lib/format'
 
 export const runtime = 'nodejs'
 
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
         if (existing) {
           cards.push({
             id: existing.id,
-            title: cardTitle(existing.title, existing.text),
+            title: cardTitle(existing.title, existing.text, 'Image'),
             status: existing.status,
             extracted: existing.status !== 'failed',
             skipped: true,
@@ -187,9 +188,6 @@ function titleFromFilename(filename: string): string {
   return withoutExtension || 'Image'
 }
 
-function cardTitle(title: string | null, text: string): string {
-  return title || text.slice(0, 120) || 'Image'
-}
 
 function excerptForImage(text: string, title: string): string {
   const firstLine = text

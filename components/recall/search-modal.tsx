@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import Link from 'next/link'
 import type { CardListItem } from '@/lib/recall-types'
 import { useDialogFocus } from '@/lib/use-dialog-focus'
+import { errorMessage, readApiError } from '@/lib/api-client'
 
 const RECENT_SEARCHES_KEY = 'recall:recent-searches:v1'
 
@@ -227,7 +228,6 @@ export function SearchModal({
       <div
         ref={dialogRef}
         className="rr-card w-full max-w-2xl rr-rise"
-        style={{ borderRadius: 4 }}
         role="dialog"
         aria-modal="true"
         aria-label="Search library"
@@ -279,7 +279,7 @@ export function SearchModal({
           aria-labelledby={searchModeTabId(mode)}
           className="grid gap-3 px-5 pt-4 sm:grid-cols-[1.2fr_0.8fr_1fr]"
         >
-          <fieldset className="rr-card px-3 py-2" style={{ borderRadius: 3 }}>
+          <fieldset className="rr-card px-3 py-2">
             <legend className="rr-mono mb-2">Search in</legend>
             <div className="flex flex-wrap gap-2">
               {SEARCH_SURFACES.map(surface => {
@@ -306,7 +306,7 @@ export function SearchModal({
               })}
             </div>
           </fieldset>
-          <label className="rr-card block px-3 py-2" style={{ borderRadius: 3 }}>
+          <label className="rr-card block px-3 py-2">
             <span className="rr-mono">Date</span>
             <select
               value={dateFilter}
@@ -320,7 +320,7 @@ export function SearchModal({
               <option value="month">Last 30 days</option>
             </select>
           </label>
-          <div className="rr-card px-3 py-2" style={{ borderRadius: 3 }}>
+          <div className="rr-card px-3 py-2">
             <div className="rr-mono mb-2">Tags</div>
             <div className="flex flex-wrap gap-2" role={activeTag ? 'radiogroup' : undefined} aria-label={activeTag ? 'Tag search scope' : undefined}>
               {activeTag ? (
@@ -442,17 +442,7 @@ function RecentSearchList({
   )
 }
 
-async function readApiError(res: Response, fallback: string): Promise<string> {
-  const data = await res.json().catch(() => null)
-  if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
-    return data.error
-  }
-  return fallback
-}
 
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback
-}
 
 function searchModeTabId(mode: 'text' | 'ai'): string {
   return `search-mode-tab-${mode}`

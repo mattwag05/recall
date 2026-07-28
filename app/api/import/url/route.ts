@@ -3,6 +3,7 @@ import { getPrisma } from '@/lib/db'
 import { indexBookmark } from '@/lib/fts'
 import { captureUrl, generateLegacyPostIdFromUrl, generatePostIdFromUrl } from '@/lib/url-capture'
 import { apiError } from '@/lib/api-errors'
+import { isPrivateHostname } from '@/lib/url-safety'
 
 // jsdom needs the Node runtime (not edge).
 export const runtime = 'nodejs'
@@ -26,22 +27,6 @@ function validateUrl(rawUrl: string): { url: URL; error?: never } | { url?: neve
 const EXISTING_FAILED_CAPTURE_MESSAGE =
   'Already saved — extraction still needs retry from the card detail page.'
 
-function isPrivateHostname(hostname: string): boolean {
-  const host = hostname.toLowerCase()
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true
-  if (host === '0.0.0.0' || host === '169.254.169.254') return true
-  if (host.includes(':') && (host === '::1' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd'))) {
-    return true
-  }
-
-  const octets = host.split('.')
-  if (octets.length !== 4 || octets.some(p => !/^\d+$/.test(p))) return false
-  const parts = octets.map(p => Number.parseInt(p, 10))
-  if (parts.some(n => n < 0 || n > 255)) return false
-  const [a, b] = parts
-  if (a === 10 || a === 127 || a === 169 && b === 254 || a === 192 && b === 168) return true
-  return a === 172 && b >= 16 && b <= 31
-}
 
 export async function POST(request: Request) {
   let body: unknown

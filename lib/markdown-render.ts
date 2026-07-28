@@ -14,19 +14,7 @@ const PURIFY_CONFIG = {
   ALLOWED_ATTR: ["href", "target", "rel", "id"],
 }
 
-let _purify: {
-  sanitize(html: string, opts?: Record<string, unknown>): string
-  removed: string[]
-  isSupported: boolean
-  setConfig(opts: Record<string, unknown>): void
-  clearConfig(): void
-  isValidAttribute(attrName: string, value: string): boolean
-  addHook(hookType: string, callback: (el: unknown, data: Record<string, unknown>, config: Record<string, unknown>) => void): void
-  removeHook(hookType: string): void
-  removeHooks(types: string[]): void
-  removeAllHooks(): void
-  version: string
-} | null = null
+let _purify: ReturnType<typeof DOMPurify> | null = null
 
 function getPurify() {
   if (_purify) return _purify

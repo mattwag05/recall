@@ -10,16 +10,11 @@ import { generateEntityConnections } from './connections'
 
 export interface PipelineProgress {
   stage: 'entity_extraction' | 'semantic_tagging' | 'categorization' | 'summarization' | 'connection_generation' | 'embedding'
-  current: number
-  total: number
-  message: string
 }
 
 export interface PipelineOptions {
   batchSize?: number  // default 20
   stages?: PipelineProgress['stage'][]
-  forceRe?: boolean  // re-enrich already-enriched bookmarks
-  onProgress?: (progress: PipelineProgress) => void
 }
 
 const ALL_STAGES: Array<PipelineProgress['stage']> = [
@@ -35,8 +30,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
   const {
     batchSize = 20,
     stages = ALL_STAGES,
-    forceRe = false,
-    onProgress,
   } = options
 
   const prisma = getPrisma()
@@ -44,18 +37,13 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
   let errors = 0
 
   const stageSet = new Set(stages)
-  const report = (stage: PipelineProgress['stage'], current: number, total: number, message: string) => {
-    onProgress?.({ stage, current, total, message })
-  }
-
   // ── Stage 1: Entity extraction ────────────────────────────────────────────
   if (stageSet.has('entity_extraction')) {
     const bookmarks = await prisma.bookmark.findMany({
-      where: forceRe ? {} : { entities: null },
+      where: { entities: null },
       select: { id: true, text: true },
     })
 
-    report('entity_extraction', 0, bookmarks.length, `Extracting entities from ${bookmarks.length} bookmarks…`)
 
     for (let i = 0; i < bookmarks.length; i++) {
       const b = bookmarks[i]
@@ -69,7 +57,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
       } catch {
         errors++
       }
-      report('entity_extraction', i + 1, bookmarks.length, `Entity extraction: ${i + 1}/${bookmarks.length}`)
     }
   }
 
@@ -77,7 +64,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
   if (stageSet.has('semantic_tagging')) {
     // Gather image tags per bookmark
     const bookmarks = await prisma.bookmark.findMany({
-      where: forceRe ? {} : {
+      where: {
         OR: [
           { semanticTags: null },
           { semanticTags: '[]' },
@@ -94,7 +81,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
       },
     })
 
-    report('semantic_tagging', 0, bookmarks.length, `Tagging ${bookmarks.length} bookmarks…`)
 
     // Prepare input with combined image tags. Pass title+body so tags reflect
     // the article's subject, not the host site's boilerplate excerpt.
@@ -135,7 +121,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
       } catch {
         errors += batch.length
       }
-      report('semantic_tagging', i + batch.length, input.length, `Tagged ${i + batch.length}/${input.length} bookmarks`)
     }
   }
 
@@ -146,7 +131,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
     })
 
     const bookmarks = await prisma.bookmark.findMany({
-      where: forceRe ? {} : { actionability: null },
+      where: { actionability: null },
       select: {
         id: true,
         title: true,
@@ -160,7 +145,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
       },
     })
 
-    report('categorization', 0, bookmarks.length, `Classifying ${bookmarks.length} bookmarks…`)
 
     for (let i = 0; i < bookmarks.length; i += batchSize) {
       const batch = bookmarks.slice(i, i + batchSize)
@@ -207,10 +191,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
               data: {
                 actionability: result.actionability,
                 enrichedAt: new Date(),
-                enrichmentMeta: JSON.stringify({
-                  enrichedAt: new Date().toISOString(),
-                  stages: Array.from(stageSet),
-                }),
               },
             })
 
@@ -236,17 +216,16 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
       } catch {
         errors += batch.length
       }
-      report('categorization', i + batch.length, bookmarks.length, `Categorization: ${i + batch.length}/${bookmarks.length}`)
     }
   }
 
   // ── Stage 5: Notebook + summary ────────────────────────────────────────────
   // The Notebook is the source of truth: we generate it, then derive the 1-line
   // `summary` from its TL;DR (consistent preview, one fewer LLM call). Notebooks
-  // are only (re)generated when missing unless forceRe, so user edits survive.
+  // are only (re)generated when missing, so user edits survive.
   if (stageSet.has('summarization')) {
     const notebookTargets = await prisma.bookmark.findMany({
-      where: forceRe ? {} : {
+      where: {
         OR: [
           { notebookContent: null },
           { summary: 'One or two crisp sentences capturing the core point.' },
@@ -256,11 +235,9 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
       select: { id: true, title: true, text: true, body: true, sourceType: true, status: true, semanticTags: true, entities: true },
     })
     const withContent = notebookTargets.filter(canGenerateTextSummary)
-    report('summarization', 0, withContent.length, `Building ${withContent.length} notebooks…`)
 
     const notebooks = await generateNotebooks(
       withContent.map(b => ({ id: b.id, title: b.title, text: b.text, body: b.body })),
-      (current, total) => report('summarization', current, total, `Notebook: ${current}/${total}`),
     )
 
     const remainingForSummary: SummarizeInput[] = []
@@ -366,11 +343,10 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
   // enrichment. This does not call the LLM and is idempotent per card.
   if (stageSet.has('connection_generation')) {
     const bookmarks = await prisma.bookmark.findMany({
-      where: forceRe ? {} : { connectionsOut: { none: { origin: 'ai' } } },
+      where: { connectionsOut: { none: { origin: 'ai' } } },
       select: { id: true },
     })
 
-    report('connection_generation', 0, bookmarks.length, `Generating local links for ${bookmarks.length} cards…`)
 
     for (let i = 0; i < bookmarks.length; i++) {
       const b = bookmarks[i]
@@ -380,7 +356,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
       } catch {
         errors++
       }
-      report('connection_generation', i + 1, bookmarks.length, `Connections: ${i + 1}/${bookmarks.length}`)
     }
   }
 
@@ -390,7 +365,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
   // semantic search; user edits invalidate embeddings in the card API.
   if (stageSet.has('embedding')) {
     const bookmarks = await prisma.bookmark.findMany({
-      where: forceRe ? {} : { embedding: null },
+      where: { embedding: null },
       select: {
         id: true,
         title: true,
@@ -403,7 +378,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
       },
     })
 
-    report('embedding', 0, bookmarks.length, `Embedding ${bookmarks.length} cards…`)
 
     for (let i = 0; i < bookmarks.length; i++) {
       const b = bookmarks[i]
@@ -419,7 +393,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
       } catch {
         errors++
       }
-      report('embedding', i + 1, bookmarks.length, `Embedding: ${i + 1}/${bookmarks.length}`)
     }
   }
 

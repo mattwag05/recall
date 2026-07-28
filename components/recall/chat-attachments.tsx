@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react'
 import { Paperclip, X } from 'lucide-react'
 import type { ChatAttachment } from '@/lib/recall-types'
+import { apiError } from '@/lib/api-client'
+import { formatFileSize } from '@/lib/format'
 
 export type ChatAttachmentDraft = ChatAttachment & {
   id: string
@@ -289,16 +291,4 @@ function isAttachmentExtractionResponse(data: unknown): data is { ok: true; atta
     (attachmentRecord.type === null || typeof attachmentRecord.type === 'string')
 }
 
-function apiError(data: unknown, fallback: string): string {
-  if (data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string') {
-    return (data as { error: string }).error
-  }
-  return fallback
-}
 
-function formatFileSize(size: number | null): string {
-  if (size === null) return 'unknown size'
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}

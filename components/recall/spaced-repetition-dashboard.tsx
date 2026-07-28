@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DEFAULT_REVIEW_PREFERENCES, readReviewPreferences, resolveReviewSessionSize, type ReviewPreferences } from '@/lib/review-preferences'
 import type { ReviewActivity } from '@/lib/review-activity'
+import { apiError } from '@/lib/api-client'
 
 type ReviewTab = 'review' | 'questions'
 
@@ -248,7 +249,7 @@ function ReviewPanel({
       </section>
 
       <section className="grid gap-5 py-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rr-card px-5 py-4" style={{ borderRadius: 3 }}>
+        <div className="rr-card px-5 py-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="font-display" style={{ fontSize: '1.25rem', fontWeight: 500 }}>Review dashboard</h2>
@@ -289,7 +290,7 @@ function ReviewPanel({
                 <fieldset className="space-y-2" disabled={reviewing || answerRevealed}>
                   <legend className="rr-mono">Choose an answer</legend>
                   {activeOptions.map(option => (
-                    <label key={option} className="rr-card flex cursor-pointer items-start gap-3 p-3" style={{ borderRadius: 3 }}>
+                    <label key={option} className="rr-card flex cursor-pointer items-start gap-3 p-3">
                       <input
                         type="radio"
                         name={`review-option-${activeQuestion.id}`}
@@ -366,7 +367,7 @@ function ReviewPanel({
           </div>
         </div>
 
-        <div className="rr-card px-5 py-4" style={{ borderRadius: 3 }}>
+        <div className="rr-card px-5 py-4">
           <h2 className="font-display" style={{ fontSize: '1.25rem', fontWeight: 500 }}>Memory progress</h2>
           <div className="mt-4 space-y-3">
             {memoryStages.map(stage => (
@@ -430,7 +431,7 @@ function reviewPanelId(tab: ReviewTab): string {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rr-card px-4 py-3" style={{ borderRadius: 3 }}>
+    <div className="rr-card px-4 py-3">
       <div className="rr-mono">{label}</div>
       <div className="font-display mt-2" style={{ fontSize: '2rem', lineHeight: 1 }}>{value}</div>
     </div>
@@ -530,9 +531,3 @@ function normalizeAnswer(value: string): string {
   return value.toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
-function apiError(data: unknown, fallback: string): string {
-  if (data !== null && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
-    return data.error
-  }
-  return fallback
-}

@@ -1,4 +1,5 @@
 import { getPrisma } from './db'
+import { cardTitle } from './format'
 
 const WIKI_LINK_PATTERN = /\[\[([^\]\n]{1,160})\]\]/g
 const MAX_GENERATED_CONNECTIONS = 12
@@ -57,7 +58,7 @@ export async function createManualCardConnection(input: ConnectionInput): Promis
   if (!target) throw new ConnectionError('Target card not found', 404)
   if (target.id === input.fromId) throw new ConnectionError('A card cannot link to itself.', 400)
 
-  const label = normalizeLabel(input.label) ?? cardTitle(target)
+  const label = normalizeLabel(input.label) ?? cardTitle(target.title, target.text)
   const existing = (await prisma.connection.findFirst({
     where: { fromId: input.fromId, toId: target.id, origin: 'manual', entityType: 'Card' },
     include: CONNECTION_INCLUDE,
@@ -159,10 +160,6 @@ export async function addNotebookWikiLinks(fromId: string, notebookContent: stri
   return added
 }
 
-export function serializeConnection(row: ConnectionRow): ConnectionResult {
-  return toConnectionResult(row)
-}
-
 export class ConnectionError extends Error {
   constructor(message: string, readonly status: number) {
     super(message)
@@ -233,7 +230,7 @@ function toConnectionResult(row: ConnectionRow): ConnectionResult {
     to: row.to
       ? {
           id: row.to.id,
-          title: cardTitle(row.to),
+          title: cardTitle(row.to.title, row.to.text),
           provider: row.to.provider,
           url: row.to.postUrl,
         }
@@ -242,9 +239,6 @@ function toConnectionResult(row: ConnectionRow): ConnectionResult {
   }
 }
 
-function cardTitle(card: { title: string | null; text: string }): string {
-  return card.title || card.text.slice(0, 120) || 'Untitled'
-}
 
 function generatedCandidates(card: {
   entities: string | null

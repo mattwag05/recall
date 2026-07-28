@@ -205,6 +205,8 @@ Recall product UI (Next.js) ──►  Pake (Tauri) ──► Recall.app
 - **OpenAI SDK** pointed at a local OpenAI-compatible server
 - **@mozilla/readability** + jsdom (article extraction)
 - **Geist / Geist Mono** via `next/font`
+- **Dark by default**, with a light theme behind the Settings toggle; every
+  colour is a CSS custom property in `app/globals.css`, so a theme is one block
 - **Pake** (Rust/Tauri) for the desktop wrapper
 
 ## Run it (local)
@@ -224,9 +226,15 @@ Browser QA can use `http://127.0.0.1:3000` when `localhost` is unavailable; the
 Next dev config explicitly allows that origin so dev resources and HMR do not
 trigger a framework overlay.
 
-Save a URL from the **＋ Add** dialog, then enrichment runs automatically. Keyboard:
-`/` search, `n` add; shortcuts only fire from the passive page surface, not while
-focus is inside links, buttons, selects, or editable fields.
+Save a URL from the **＋ Add** dialog, then enrichment runs automatically.
+
+**Keyboard.** `⌘K`/`Ctrl+K` opens the command palette (jump to any page, or
+search cards) from anywhere, including from inside a text field. In the
+library, `/` opens search and `n` opens Add. In the **Inbox**, cards are
+triaged one at a time: `n`/`→` next, `p`/`←` previous, `r` reviewed, `s` pin,
+`a` archive, `e` open the card, `Esc` closes the note or tag editor. Apart
+from the palette, shortcuts only fire from the passive page surface — never
+while focus is inside links, buttons, selects, or editable fields.
 
 ### LLM backend
 
@@ -322,7 +330,9 @@ docker compose -f docker-compose.deploy.yml up -d --build
 | `/item/:id` | GET | Card detail UI |
 | `/chat` | GET | Global local-RAG chat with selectable tag/card context |
 | `/spaced-repetition` | GET | Review dashboard with a local due-question queue and card-group quiz entry points |
+| `/inbox` | GET | Triage inbox — review new cards one at a time |
 | `/settings` | GET | Settings UI |
+| `/api/inbox` | GET | Inbox queue; `?count=1` returns just the badge total |
 | `/api/import/url` | POST | Save an article/media URL → extract reader text, Apple Podcasts transcripts when configured, or media metadata |
 | `/api/import/wiki` | GET/POST | Search and import Wikipedia topics as local Reader cards |
 | `/api/import/bookmarks` | POST | Save one browser bookmarks HTML export as local URL cards |
