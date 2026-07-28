@@ -1,6 +1,7 @@
 name: Strix Security Scan
 
-# Agentic AI pentest via Strix, driven by a local LLM (zero cost).
+# Agentic AI pentest via Strix, driven by glm-5.2 via the Manifest gateway
+# (pinned strix agent, flat-rate ollama-cloud, $0 marginal; see homelab#1).
 # Runs on the docker-host host-executor (Strix spawns its own sandbox container).
 # Uses the pre-built ~/strix-venv on the runner host (openai pinned to 2.26.0 for the
 # openai-agents 0.14.6 usage-schema compatibility). Exit 2 = vulns found = job fails.
@@ -28,8 +29,8 @@ jobs:
     steps:
       - name: Guard — require LLM key
         run: |
-          if [ -z "${{ secrets.STRIX_LLM_KEY }}" ]; then
-            echo "STRIX_LLM_KEY not set — refusing to run."; exit 1
+          if [ -z "${{ secrets.STRIX_MANIFEST_KEY }}" ]; then
+            echo "STRIX_MANIFEST_KEY not set — refusing to run."; exit 1
           fi
 
       - name: Preflight — LLM reachability probe
@@ -37,8 +38,8 @@ jobs:
         run: |
           set +e
           CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
-            -H "Authorization: Bearer ${{ secrets.STRIX_LLM_KEY }}" \
-            "${{ vars.LLM_API_BASE }}/models")
+            -H "Authorization: Bearer ${{ secrets.STRIX_MANIFEST_KEY }}" \
+            "${{ vars.STRIX_API_BASE }}/models")
           rc=$?
           # Unreachable = curl failed OR HTTP 000 (no response). ANY answered
           # status (401/403/404/500 …) = the host is awake = reachable.
@@ -56,14 +57,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reset LLM engine (fresh memory headroom)
-        if: steps.preflight.outputs.llm_up == 'true'
-        run: |
-          MODEL="${{ vars.STRIX_LLM }}"; MODEL="${MODEL#openai/}"
-          curl -s --max-time 30 -X POST \
-            -H "Authorization: Bearer ${{ secrets.STRIX_LLM_KEY }}" \
-            "${{ vars.LLM_API_BASE }}/models/$MODEL/unload" >/dev/null || true
-
       - name: Scan
         id: scan
         if: steps.preflight.outputs.llm_up == 'true'
@@ -72,7 +65,9 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             SCOPE="--scope-mode diff --diff-base origin/${{ github.base_ref }}"
           else
-            # Full-repo scans OOM the oMLX host (~50 GB dynamic guard, homelab#1):
+            # 7-day scoping retained after the Manifest/glm-5.2 move until cloud
+            # scans prove stable (then trial full-scope on recall first).
+            # Original reason (oMLX ~50 GB dynamic guard, homelab#1):
             # strix keeps full conversation history with no compaction, so a single
             # deep turn blows the KV cache past the watermark on its own. Scope
             # schedule/dispatch runs to the last 7 days of commits, matching the
@@ -114,16 +109,8 @@ jobs:
           exit 0
         env:
           STRIX_LLM: ${{ vars.STRIX_LLM }}
-          LLM_API_BASE: ${{ vars.LLM_API_BASE }}
-          LLM_API_KEY: ${{ secrets.STRIX_LLM_KEY }}
-
-      - name: Free LLM engine after scan
-        if: always()
-        run: |
-          MODEL="${{ vars.STRIX_LLM }}"; MODEL="${MODEL#openai/}"
-          curl -s --max-time 30 -X POST \
-            -H "Authorization: Bearer ${{ secrets.STRIX_LLM_KEY }}" \
-            "${{ vars.LLM_API_BASE }}/models/$MODEL/unload" >/dev/null || true
+          LLM_API_BASE: ${{ vars.STRIX_API_BASE }}
+          LLM_API_KEY: ${{ secrets.STRIX_MANIFEST_KEY }}
 
       - name: Alert on findings
         if: failure() && steps.scan.outputs.rc == '2' && steps.preflight.outputs.llm_up == 'true'
