@@ -722,7 +722,7 @@ export function CardDetailView({
       <div className="flex items-center justify-between pt-8 pb-4">
         <Link href="/items" className="rr-mono rr-link">← Library</Link>
         <div className="flex items-center gap-3">
-          <div className="rr-card flex items-center gap-1 px-2 py-1" style={{ borderRadius: 3 }}>
+          <div className="rr-card flex items-center gap-1 px-2 py-1">
             <Type size={14} aria-hidden="true" style={{ color: 'var(--accent)', strokeWidth: 1.8 }} />
             <button
               className="rr-btn-plain"
@@ -764,7 +764,7 @@ export function CardDetailView({
               role="menu"
               aria-label="Card actions"
               onKeyDown={onMenuKeyDown}
-              style={{ borderRadius: 3 }}
+             
             >
               <div className="px-4 py-2 rr-rule" role="presentation">
                 <div className="flex items-center justify-between gap-3">
@@ -864,7 +864,7 @@ export function CardDetailView({
           rel="noreferrer"
           aria-label={`Open full image for ${card.title}`}
           className="rr-card mt-5 block overflow-hidden"
-          style={{ borderRadius: 3 }}
+         
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -1171,7 +1171,7 @@ function NotebookPanel(props: {
           onChange={e => props.setDraft(e.target.value)}
           rows={18}
           className="w-full bg-transparent outline-none rr-prose p-3"
-          style={{ border: '1px solid var(--hairline)', borderRadius: 3, fontFamily: 'var(--font-mono)', fontSize: `${props.readingStyle.fontSize}` }}
+          style={{ border: '1px solid var(--hairline)', borderRadius: 6, fontFamily: 'var(--font-mono)', fontSize: `${props.readingStyle.fontSize}` }}
         />
         <div className="mt-3 flex gap-3">
           <button className="rr-btn rr-btn-accent" onClick={props.onSave}>Save notebook</button>
@@ -1257,7 +1257,7 @@ function NotebookContents({ content }: { content: string }) {
     <nav
       className="rr-card mb-5 px-4 py-3"
       aria-label="Notebook contents"
-      style={{ borderRadius: 3 }}
+     
     >
       <div className="rr-mono mb-2" style={{ color: 'var(--accent)' }}>Contents</div>
       <ol className="space-y-1">
@@ -1407,7 +1407,7 @@ function ReaderPanel({
         </div>
       </div>
       {reformatError && (
-        <div className="rr-card mb-4 p-3" style={{ borderRadius: 3 }}>
+        <div className="rr-card mb-4 p-3">
           <p className="rr-prose" style={{ fontSize: '0.92rem' }}>{reformatError}</p>
         </div>
       )}
@@ -1517,7 +1517,7 @@ function CardChatPanel({ card }: { card: CardDetail }) {
         <p className="rr-mono" style={{ color: 'var(--accent)' }}>Card chat · Phase 2</p>
         <h2 className="font-display mt-1" style={{ fontSize: '1.25rem', fontWeight: 500 }}>Chat with this card</h2>
       </div>
-      <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+      <div className="rr-card p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rr-mono">Context</span>
           <span className="rr-tag" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>Current card</span>
@@ -1540,7 +1540,7 @@ function CardChatPanel({ card }: { card: CardDetail }) {
       {messages.length > 0 && (
         <div className="space-y-4" aria-live="polite">
           {messages.map(message => (
-            <div key={message.id} className="rr-card p-4" style={{ borderRadius: 3 }}>
+            <div key={message.id} className="rr-card p-4">
               <p className="rr-mono" style={{ color: message.role === 'assistant' ? 'var(--accent)' : 'var(--sepia)' }}>
                 {message.role === 'assistant' ? 'Recall' : 'You'}
               </p>
@@ -1565,7 +1565,7 @@ function CardChatPanel({ card }: { card: CardDetail }) {
         </div>
       )}
       {chatError && (
-        <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+        <div className="rr-card p-4">
           <p className="rr-prose" style={{ fontSize: '0.94rem' }}>{chatError}</p>
         </div>
       )}
@@ -1583,7 +1583,7 @@ function CardChatPanel({ card }: { card: CardDetail }) {
             onChange={event => setPrompt(event.currentTarget.value)}
             placeholder="What would you like to know?"
             className="w-full bg-transparent p-3 outline-none rr-prose"
-            style={{ border: '1px solid var(--hairline)', borderRadius: 3, resize: 'vertical' }}
+            style={{ border: '1px solid var(--hairline)', borderRadius: 6, resize: 'vertical' }}
             onKeyDown={event => {
               if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
                 event.preventDefault()
@@ -1816,7 +1816,7 @@ function QuizPanel({
           disabled={generatingQuestions}
           aria-label="Generate quiz questions for this card"
           title="Generate local active-recall questions from this card's Notebook and Reader content."
-          style={{ borderRadius: 3, cursor: generatingQuestions ? 'wait' : 'pointer' }}
+          style={{ borderRadius: 6, cursor: generatingQuestions ? 'wait' : 'pointer' }}
           onClick={onGenerateQuestions}
           type="button"
         >
@@ -1829,7 +1829,7 @@ function QuizPanel({
           aria-controls="custom-question-form"
           aria-label="Create a custom quiz question for this card"
           title="Write a short-answer prompt and answer for this card."
-          style={{ borderRadius: 3, cursor: questionMutating ? 'wait' : 'pointer' }}
+          style={{ borderRadius: 6, cursor: questionMutating ? 'wait' : 'pointer' }}
           onClick={() => setCreatingCustom(value => !value)}
           type="button"
           disabled={questionMutating}
@@ -1839,7 +1839,7 @@ function QuizPanel({
         </button>
       </div>
       {creatingCustom && (
-        <form id="custom-question-form" className="rr-card space-y-3 p-4" style={{ borderRadius: 3 }} onSubmit={submitCustomQuestion}>
+        <form id="custom-question-form" className="rr-card space-y-3 p-4" onSubmit={submitCustomQuestion}>
           <label className="block">
             <span className="rr-mono">Question prompt</span>
             <textarea
@@ -1872,7 +1872,7 @@ function QuizPanel({
         </form>
       )}
       {sessionActive && currentQuestion && (
-        <section className="rr-card space-y-4 p-5" style={{ borderRadius: 3 }} aria-label="Card quiz session">
+        <section className="rr-card space-y-4 p-5" aria-label="Card quiz session">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1887,7 +1887,7 @@ function QuizPanel({
             <fieldset className="space-y-2" disabled={questionMutating || answerRevealed}>
               <legend className="rr-mono">Choose an answer</legend>
               {currentOptions.map(option => (
-                <label key={option} className="rr-card flex cursor-pointer items-start gap-3 p-3" style={{ borderRadius: 3 }}>
+                <label key={option} className="rr-card flex cursor-pointer items-start gap-3 p-3">
                   <input
                     type="radio"
                     name={`quiz-option-${currentQuestion.id}`}
@@ -1950,7 +1950,7 @@ function QuizPanel({
         </section>
       )}
       {matchingActive && (
-        <section className="rr-card space-y-4 p-5" style={{ borderRadius: 3 }} aria-label="Card matching quiz session">
+        <section className="rr-card space-y-4 p-5" aria-label="Card matching quiz session">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="rr-mono">Matching · {quizQuestions.length} pairs</p>
@@ -2003,7 +2003,7 @@ function QuizPanel({
           </div>
           <div className="space-y-3">
             {quizQuestions.map(question => (
-              <article key={question.id} className="rr-card p-4" style={{ borderRadius: 3 }}>
+              <article key={question.id} className="rr-card p-4">
                 <div className="flex flex-wrap gap-2">
                   <span className="rr-tag">{question.type}</span>
                   <span className="rr-tag">{question.memoryStage}</span>
@@ -2089,7 +2089,7 @@ function QuizPanel({
           </div>
         </section>
       ) : (
-        <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+        <div className="rr-card p-4">
           <p className="rr-prose" style={{ fontSize: '0.94rem' }}>No questions have been saved for this card yet. Generate from the Notebook or create a custom short-answer prompt.</p>
         </div>
       )}
@@ -2201,7 +2201,7 @@ function ConnectionsPanel({
 
       <form
         className="rr-card flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
-        style={{ borderRadius: 3 }}
+       
         onSubmit={e => {
           e.preventDefault()
           const targetTitle = manualLinkDraft.trim()
@@ -2217,7 +2217,7 @@ function ConnectionsPanel({
             placeholder="Spaced repetition"
             disabled={connectionMutating}
             className="mt-2 w-full bg-transparent outline-none rr-prose"
-            style={{ border: '1px solid var(--hairline)', borderRadius: 3, padding: '0.55rem 0.65rem' }}
+            style={{ border: '1px solid var(--hairline)', borderRadius: 6, padding: '0.55rem 0.65rem' }}
           />
         </label>
         <button
@@ -2237,13 +2237,13 @@ function ConnectionsPanel({
           {relatedLoading && <span className="rr-mono">ranking embeddings…</span>}
         </div>
         {relatedError && (
-          <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+          <div className="rr-card p-4">
             <p className="rr-prose" style={{ fontSize: '0.94rem' }}>{relatedError}</p>
             <button className="rr-btn mt-3" onClick={onRetryRelated} disabled={relatedLoading}>{relatedLoading ? 'Retrying…' : 'Retry related cards'}</button>
           </div>
         )}
         {!relatedError && !relatedLoading && relatedCards.length === 0 && (
-          <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+          <div className="rr-card p-4">
             <p className="rr-prose" style={{ fontSize: '0.94rem' }}>No related cards ranked yet.</p>
           </div>
         )}
@@ -2256,7 +2256,7 @@ function ConnectionsPanel({
                 <article
                   key={item.id}
                   className="rr-card p-4 rr-rise"
-                  style={{ borderRadius: 3 }}
+                 
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
@@ -2327,7 +2327,7 @@ function ConnectionsPanel({
           ))}
         </div>
       ) : (
-        <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+        <div className="rr-card p-4">
           <p className="rr-prose" style={{ fontSize: '0.94rem' }}>No outbound links saved yet.</p>
         </div>
       )}
@@ -2355,7 +2355,7 @@ function ConnectionsPanel({
           ))}
         </div>
       ) : (
-        <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+        <div className="rr-card p-4">
           <p className="rr-prose" style={{ fontSize: '0.94rem' }}>No backlinks point to this card yet.</p>
         </div>
       )}
@@ -2494,7 +2494,7 @@ function GraphPanel({
       </div>
 
       {settingsOpen && (
-        <section id="card-graph-settings" className="rr-card p-4" style={{ borderRadius: 3 }} aria-label="Card graph settings">
+        <section id="card-graph-settings" className="rr-card p-4" aria-label="Card graph settings">
           <div className="grid gap-4 md:grid-cols-[1fr_1.4fr]">
             <fieldset className="space-y-2">
               <legend className="rr-mono" style={{ color: 'var(--accent)' }}>Node families</legend>
@@ -2561,7 +2561,7 @@ function GraphPanel({
 
       {graphLoading && <p className="rr-mono">traversing graph…</p>}
       {graphError && (
-        <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+        <div className="rr-card p-4">
           <p className="rr-prose" style={{ fontSize: '0.94rem' }}>{graphError}</p>
           <button
             className="rr-btn mt-3"
@@ -2580,14 +2580,14 @@ function GraphPanel({
 
       {relatedLoading && <p className="rr-mono">ranking embeddings…</p>}
       {relatedError && (
-        <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+        <div className="rr-card p-4">
           <p className="rr-prose" style={{ fontSize: '0.94rem' }}>{relatedError}</p>
           <button className="rr-btn mt-3" onClick={onRetryRelated} disabled={relatedLoading}>{relatedLoading ? 'Retrying…' : 'Retry graph ranking'}</button>
         </div>
       )}
 
       {visibleNodes.length === 0 && !relatedLoading && !relatedError && (
-        <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+        <div className="rr-card p-4">
           <p className="rr-prose" style={{ fontSize: '0.94rem' }}>No graph nodes match the current depth and filters.</p>
           <button
             className="rr-btn mt-3"
@@ -2612,7 +2612,7 @@ function GraphPanel({
           aria-modal="true"
           aria-label="Card graph fullscreen view"
         >
-          <div className="rr-card flex max-h-[92vh] w-full max-w-6xl flex-col gap-4 overflow-auto p-4 sm:p-6" style={{ borderRadius: 3 }}>
+          <div className="rr-card flex max-h-[92vh] w-full max-w-6xl flex-col gap-4 overflow-auto p-4 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="rr-mono" style={{ color: 'var(--accent)' }}>Graph fullscreen</p>
@@ -2666,7 +2666,7 @@ function GraphCanvas({
   const markerId = fullscreen ? 'graph-edge-arrow-fullscreen' : 'graph-edge-arrow-inline'
 
   return (
-    <div className={`rr-card overflow-hidden p-5 ${fullscreen ? 'min-h-[64vh]' : 'min-h-72'}`} style={{ borderRadius: 3 }}>
+    <div className={`rr-card overflow-hidden p-5 ${fullscreen ? 'min-h-[64vh]' : 'min-h-72'}`}>
       <div className="rr-mono mb-3" style={{ color: 'var(--sepia)' }}>{summary}</div>
       <div
         className={`relative mx-auto flex ${fullscreen ? 'min-h-[58vh] max-w-5xl' : 'min-h-72 max-w-3xl'} items-center justify-center`}
@@ -2703,7 +2703,7 @@ function GraphCanvas({
         </svg>
         <div
           className="relative z-20 max-w-48 border px-4 py-3 text-center"
-          style={{ borderRadius: 3, borderColor: 'var(--accent)', background: 'var(--card)' }}
+          style={{ borderRadius: 6, borderColor: 'var(--accent)', background: 'var(--card)' }}
         >
           <div className="rr-mono" style={{ color: 'var(--accent)' }}>Current card</div>
           <div className="font-display mt-1" style={{ fontSize: '1rem', overflowWrap: 'anywhere' }}>{cardTitle}</div>

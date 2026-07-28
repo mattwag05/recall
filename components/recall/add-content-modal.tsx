@@ -563,7 +563,7 @@ export function AddContentModal({
       <div
         ref={dialogRef}
         className="rr-card w-full max-w-xl rr-rise"
-        style={{ borderRadius: 4, maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto' }}
+        style={{ maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto' }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-content-title"
@@ -876,7 +876,7 @@ function WikiPanel({
               key={`${result.title}-${result.url}`}
               type="button"
               className="rr-card px-4 py-3 text-left"
-              style={{ borderRadius: 3 }}
+             
               disabled={busy}
               onClick={() => onImport(result.title)}
               aria-label={`Import Wikipedia topic ${result.title}`}
@@ -967,7 +967,7 @@ function ImportSection({ kind, api }: { kind: ImportKind; api: FilePanelApi }) {
     <>
       <div
         className={`rr-card flex flex-col items-center justify-center px-4 text-center ${cfg.tall ? 'min-h-36 py-6' : 'min-h-32 py-5'}`}
-        style={{ borderRadius: 3, borderStyle: 'dashed' }}
+        style={{ borderRadius: 6, borderStyle: 'dashed' }}
         onDragOver={event => event.preventDefault()}
         onDrop={onDrop}
       >
@@ -997,7 +997,7 @@ function ImportSection({ kind, api }: { kind: ImportKind; api: FilePanelApi }) {
         </button>
       </div>
       {files.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
+        <div className="rr-card p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="rr-mono">{files.length} selected {cfg.selectedNoun ?? plural(cfg, files.length)}</p>
             <button className="rr-link rr-mono" type="button" onClick={() => api.onClear(kind)} disabled={api.busy}>Clear</button>
@@ -1012,7 +1012,7 @@ function ImportSection({ kind, api }: { kind: ImportKind; api: FilePanelApi }) {
         </div>
       )}
       {failures.length > 0 && (
-        <div className="rr-card p-3" style={{ borderRadius: 3 }}>
+        <div className="rr-card p-3">
           <p className="rr-mono" style={{ color: 'var(--accent)' }}>{cfg.issuesLabel} import issues</p>
           <ul className="mt-2 space-y-1 rr-prose" style={{ fontSize: '0.9rem' }}>
             {failures.map(failure => (

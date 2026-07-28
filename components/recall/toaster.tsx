@@ -44,7 +44,7 @@ export function Toaster() {
             fontSize: '0.72rem',
             letterSpacing: '0.06em',
             padding: '0.55rem 1rem',
-            borderRadius: 3,
+            borderRadius: 6,
             boxShadow: '0 6px 22px rgba(40,30,20,0.25)',
           }}
         >

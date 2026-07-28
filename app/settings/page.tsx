@@ -483,14 +483,14 @@ function AiEndpointSettings() {
 
   if (loading) {
     return (
-      <div className="rr-card mb-4 p-4" style={{ borderRadius: 3 }}>
+      <div className="rr-card mb-4 p-4">
         <p className="rr-mono">Loading AI endpoint settings…</p>
       </div>
     )
   }
   if (!draft) {
     return (
-      <div className="rr-card mb-4 p-4" style={{ borderRadius: 3 }}>
+      <div className="rr-card mb-4 p-4">
         <p className="rr-mono">{message ?? 'AI endpoint settings are unavailable.'}</p>
       </div>
     )
@@ -498,7 +498,7 @@ function AiEndpointSettings() {
 
   return (
     <div className="mb-5 space-y-4">
-      <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+      <div className="rr-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="rr-mono">Model endpoint</div>
@@ -581,7 +581,7 @@ function AiEndpointSettings() {
         </div>
       </div>
 
-      <div className="rr-card p-4" style={{ borderRadius: 3 }}>
+      <div className="rr-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="rr-mono">Embeddings</div>

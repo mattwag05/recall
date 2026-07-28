@@ -161,17 +161,18 @@ a { color: inherit; }
   .rr-safe-bottom { padding-bottom: var(--rr-safe-bottom-desktop); }
 }
 
+/* Micro-label. Sans and sentence-case (SBT's treatment); mono is reserved for
+   keycaps now. Changing the definition retints all ~180 call sites at once. */
 .rr-mono {
-  font-family: var(--font-mono);
-  font-size: 0.69rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
   color: var(--sepia);
 }
 
 .rr-tag {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-family: var(--font-body);
+  font-size: 0.73rem;
   letter-spacing: 0;
   color: var(--sepia);
   border: 1px solid var(--hairline);
@@ -183,6 +184,7 @@ a { color: inherit; }
 .rr-tag:hover { border-color: var(--accent); color: var(--accent); }
 
 .rr-card {
+  border-radius: 12px;
   background: var(--card);
   border: 1px solid var(--card-edge);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
@@ -196,13 +198,13 @@ a { color: inherit; }
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
   letter-spacing: 0;
   border: 1px solid var(--hairline);
   color: var(--ink);
   background: var(--card);
-  border-radius: 7px;
+  border-radius: 6px;
   padding: 0.5rem 0.72rem;
   transition: all 0.18s ease;
   cursor: pointer;
@@ -235,13 +237,13 @@ a { color: inherit; }
 
 .rr-select,
 .rr-input {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
   letter-spacing: 0;
   color: var(--ink);
   border: 1px solid var(--hairline);
   background: var(--input-bg);
-  border-radius: 7px;
+  border-radius: 6px;
   padding: 0.48rem 0.65rem;
   outline: none;
 }
@@ -255,7 +257,7 @@ a { color: inherit; }
   [role="tab"], [role="menuitem"], [role="radio"], [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 /* Editorial link underline that grows on hover. */

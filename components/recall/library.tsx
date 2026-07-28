@@ -978,7 +978,7 @@ function ProfileMenu({ onKeyDown }: { onKeyDown: (e: ReactKeyboardEvent<HTMLDivE
       role="menu"
       aria-label="Profile menu"
       onKeyDown={onKeyDown}
-      style={{ borderRadius: 4, width: 'min(18rem, calc(100vw - 2rem))' }}
+      style={{ width: 'min(18rem, calc(100vw - 2rem))' }}
     >
       <div className="mb-3 flex items-start gap-3 rr-rule pb-3">
         <UserCircle size={18} aria-hidden="true" className="mt-1 shrink-0" style={{ color: 'var(--accent)', strokeWidth: 1.7 }} />
@@ -1075,7 +1075,7 @@ function CardGridTile({
     <article
       className="rr-card rr-rise relative flex min-h-64 flex-col overflow-hidden"
       style={{
-        borderRadius: 3,
+        borderRadius: 6,
         animationDelay: `${Math.min(index, 12) * 45}ms`,
       }}
     >
