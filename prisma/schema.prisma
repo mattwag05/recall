@@ -32,7 +32,8 @@ model Bookmark {
   summary        String?   // short 1-2 sentence summary
   notebookContent String?  // = Recall "Notebook": editable rich AI summary (markdown), survives regen
   sourceType     String    @default("social") // "social", "url", "wiki", "pasted", "document", "image", "media"
-  status         String    @default("ready")  // organizing | summarizing | ready | failed
+  status         String    @default("ready")  // organizing | summarizing | ready | failed (processing pipeline)
+  triageStatus   String    @default("new")    // new | reviewed | pinned | archived (inbox queue membership)
   shared         Boolean   @default(false)
   shareId        String?   @unique
   embedding      Bytes?    // float32 vector for semantic search (Phase 2)

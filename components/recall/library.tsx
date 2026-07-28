@@ -3,15 +3,20 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { BookOpen, Bot, Brain, Bug, CheckSquare, ChevronDown, ChevronRight, Circle, Clock, Command, Cpu, FileQuestion, FileText, HelpCircle, Image as ImageIcon, Inbox, LayoutGrid, Link2, List, Mail, MessageCircle, MessageCircleQuestion, MoreHorizontal, Network, Plus, Search, Settings, Sparkles, Star, Tags, UserCircle, type LucideIcon } from 'lucide-react'
+import { Archive, BookOpen, Bot, Brain, Bug, CheckSquare, ChevronDown, ChevronRight, Circle, Clock, Command, Cpu, FileQuestion, FileText, HelpCircle, Image as ImageIcon, Inbox, LayoutGrid, Link2, List, Mail, MessageCircle, MessageCircleQuestion, MoreHorizontal, Network, Plus, Search, Settings, Sparkles, Star, Tags, UserCircle, type LucideIcon } from 'lucide-react'
 import { AddContentModal, type AddContentTab, type SavedContentMeta } from './add-content-modal'
 import { SearchModal } from './search-modal'
 import { toast } from './toaster'
 import { groupByDate, relativeTime, type CardListItem, type TagNode } from '@/lib/recall-types'
 import { errorMessage } from '@/lib/api-client'
+import { isShortcutTarget } from '@/lib/shortcuts'
 
-async function fetchCards(tag: string | null) {
-  const res = await fetch(`/api/cards${tag ? `?tag=${encodeURIComponent(tag)}` : ''}`)
+async function fetchCards(tag: string | null, triage: 'default' | 'archived' = 'default') {
+  const params = new URLSearchParams()
+  if (tag) params.set('tag', tag)
+  if (triage === 'archived') params.set('triage', 'archived')
+  const qs = params.toString()
+  const res = await fetch(`/api/cards${qs ? `?${qs}` : ''}`)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Could not load cards')
   if (!Array.isArray(data.cards)) {
@@ -55,13 +60,15 @@ export function Library() {
   const [loaded, setLoaded] = useState(false)
   const [libraryError, setLibraryError] = useState<string | null>(null)
   const [tagError, setTagError] = useState<string | null>(null)
+  const [inboxCount, setInboxCount] = useState(0)
+  const [triageView, setTriageView] = useState<'default' | 'archived'>('default')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const profileMenuRef = useRef<HTMLDivElement | null>(null)
   const profileButtonRef = useRef<HTMLButtonElement | null>(null)
 
-  const loadCards = useCallback(async (tag: string | null) => {
+  const loadCards = useCallback(async (tag: string | null, triage: 'default' | 'archived' = 'default') => {
     try {
-      const nextCards = await fetchCards(tag)
+      const nextCards = await fetchCards(tag, triage)
       setCards(nextCards)
       setLibraryError(null)
     } catch (err) {
@@ -81,23 +88,40 @@ export function Library() {
   }, [])
 
   useEffect(() => {
-    loadCards(activeTag)
-  }, [activeTag, loadCards])
+    loadCards(activeTag, triageView)
+  }, [activeTag, triageView, loadCards])
 
   useEffect(() => {
     loadTags()
   }, [loadTags])
 
+  // Inbox badge: on mount, every 60s, and whenever the inbox triages a card.
+  useEffect(() => {
+    const refresh = () => {
+      fetch('/api/inbox?count=1')
+        .then(res => res.json())
+        .then(data => { if (typeof data.total === 'number') setInboxCount(data.total) })
+        .catch(() => {})
+    }
+    refresh()
+    const timer = setInterval(refresh, 60_000)
+    window.addEventListener('inbox-updated', refresh)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('inbox-updated', refresh)
+    }
+  }, [])
+
   // Poll while any card is still processing (organizing/summarizing).
   useEffect(() => {
     const processing = cards.some(c => c.status === 'organizing' || c.status === 'summarizing')
     if (processing && !pollRef.current) {
-      pollRef.current = setInterval(() => { loadCards(activeTag); loadTags() }, 4000)
+      pollRef.current = setInterval(() => { loadCards(activeTag, triageView); loadTags() }, 4000)
     } else if (!processing && pollRef.current) {
       clearInterval(pollRef.current); pollRef.current = null
     }
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
-  }, [cards, activeTag, loadCards, loadTags])
+  }, [cards, activeTag, triageView, loadCards, loadTags])
 
   // Keyboard: "/" search, "n" new — suppressed while any modal/menu is open.
   useEffect(() => {
@@ -257,6 +281,9 @@ export function Library() {
       <div className="grid min-h-screen lg:grid-cols-[17rem_minmax(0,1fr)_20rem]">
         <ShellNav
           cardCount={cards.length}
+          inboxCount={inboxCount}
+          triageView={triageView}
+          onSetTriageView={setTriageView}
           readyCount={readyCount}
           reviewDueEstimate={reviewDueEstimate}
           activeTag={activeTag}
@@ -480,12 +507,6 @@ export function Library() {
   )
 }
 
-function isShortcutTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable) return true
-  return !!target.closest('input, textarea, select, button, a, [role="button"], [contenteditable="true"]')
-}
-
 
 function flattenTags(nodes: TagNode[], trail: string[] = []): { slug: string; label: string; color: string; count: number }[] {
   return nodes.flatMap(n => {
@@ -524,6 +545,9 @@ function libraryViewModeId(view: LibraryView): string {
 
 function sortCards(cards: CardListItem[], mode: LibrarySort): CardListItem[] {
   return [...cards].sort((a, b) => {
+    // Pinned cards float to the top of whatever ordering is active.
+    const pinDelta = Number(b.triageStatus === 'pinned') - Number(a.triageStatus === 'pinned')
+    if (pinDelta !== 0) return pinDelta
     const aDate = new Date(mode === 'created' ? a.createdAt : a.updatedAt).getTime()
     const bDate = new Date(mode === 'created' ? b.createdAt : b.updatedAt).getTime()
     return bDate - aDate
@@ -540,7 +564,10 @@ function emptySummaryCopy(card: CardListItem): string {
 
 function ShellNav({
   cardCount,
+  inboxCount,
   readyCount,
+  triageView,
+  onSetTriageView,
   reviewDueEstimate,
   activeTag,
   activeTagLabel,
@@ -561,7 +588,10 @@ function ShellNav({
   collapseAllTags,
 }: {
   cardCount: number
+  inboxCount: number
   readyCount: number
+  triageView: 'default' | 'archived'
+  onSetTriageView: (view: 'default' | 'archived') => void
   reviewDueEstimate: number
   activeTag: string | null
   activeTagLabel: string
@@ -584,6 +614,7 @@ function ShellNav({
 }) {
   const navItems = [
     { label: 'Library', href: '/items', icon: BookOpen, meta: cardCount.toLocaleString(), active: true },
+    { label: 'Inbox', href: '/inbox', icon: Inbox, meta: inboxCount > 99 ? '99+' : inboxCount > 0 ? String(inboxCount) : '' },
     { label: 'Chat', href: '/chat', icon: MessageCircle, meta: '⌘ J' },
     { label: 'Review', href: '/spaced-repetition', icon: Brain, meta: reviewDueEstimate ? String(reviewDueEstimate) : '0' },
     { label: 'Settings', href: '/settings', icon: Settings, meta: '⌘ ,' },
@@ -641,19 +672,19 @@ function ShellNav({
           </div>
 
           <button
-            onClick={() => onPickTag(null)}
-            className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium ${activeTag === null ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)]'}`}
+            onClick={() => { onPickTag(null); onSetTriageView('default') }}
+            className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium ${activeTag === null && triageView === 'default' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)]'}`}
           >
             <span className="flex items-center gap-2"><Inbox size={15} aria-hidden="true" /> All items</span>
             <span className="font-mono text-xs text-[var(--sepia)]">{cardCount}</span>
           </button>
           <button
-            onClick={() => onPickTag(null)}
-            className="mb-3 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-[var(--ink-soft)] hover:bg-[var(--paper)]"
-            title={activeTagLabel}
+            onClick={() => onSetTriageView(triageView === 'archived' ? 'default' : 'archived')}
+            aria-pressed={triageView === 'archived'}
+            className={`mb-3 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${triageView === 'archived' ? 'bg-[var(--accent)]/15 font-medium text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)]'}`}
+            title="Archived cards are hidden from the library by default"
           >
-            <span className="flex min-w-0 items-center gap-2"><Star size={15} aria-hidden="true" /> <span className="truncate">Ready</span></span>
-            <span className="font-mono text-xs text-[var(--sepia)]">{readyCount}</span>
+            <span className="flex min-w-0 items-center gap-2"><Archive size={15} aria-hidden="true" /> <span className="truncate">Archived</span></span>
           </button>
 
           {selectedTagCount > 0 && (
