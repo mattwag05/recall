@@ -13,6 +13,15 @@ import { normalizeAiProvider, providerDefaults, providerNeedsKey, type AiProvide
  * (JSON) stages don't burn the token budget on reasoning:
  *   - local server (Qwen3.6): chat_template_kwargs.enable_thinking = false
  *   - Ollama (gemma4): reasoning_effort = "none"
+ *
+ * ⚠️ Known gap (recall-mok): AI_PROVIDER_OPTIONS also offers openrouter,
+ * lmstudio and custom, and noThinkExtra() sends nothing for those. A reasoning
+ * model behind one of them spends max_tokens on chain-of-thought and the reply
+ * is cut off mid-JSON — which llmChat cannot see, because it never checks
+ * finish_reason. Batched callers (categorizer, semantic-tagger) then swallow
+ * the parse error and fall back for the whole batch, so the damage looks like
+ * successful-but-wrong enrichment rather than an error. Raise maxTokens if you
+ * add a batched JSON stage before that bug is fixed.
  */
 
 const OMLX_BASE = process.env.OMLX_BASE_URL || 'http://localhost:8000/v1'

@@ -91,3 +91,8 @@ CLAUDE.md
 AGENTS.md
 .beads/
 .remember/
+.agents/
+.codex/
+
+# Beads / Dolt files (added by bd init)
+.beads/proxieddb/
