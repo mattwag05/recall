@@ -67,6 +67,11 @@ data/media/
 *.db
 *.db-shm
 *.db-wal
+
+# Scratch scripts used for local seeding/inspection
+*-tmp.ts
+*-tmp.mjs
+*-tmp.js
 .beads-credential-key
 
 # Project-local MCP config (per-machine, may contain host URLs)
