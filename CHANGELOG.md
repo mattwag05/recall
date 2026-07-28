@@ -48,6 +48,17 @@ own fork) and trims Recall's codebase in the same pass.
 
 Net: about 2,600 lines removed.
 
+#### Fixed
+- **Production boot crash-loop** — the simplified `start-production.sh`
+  introduced in this branch ran `prisma db push` without
+  `--accept-data-loss`. Recall's FTS5 search index lives in raw SQLite
+  virtual tables that are not Prisma models, so the push refused to run
+  rather than drop them, and the container never started. The push now
+  carries the flag; the dropped index is rebuilt automatically by `initFts()`
+  on the first search. `scripts/check-boot-schema.ts` guards both this and
+  the opposite failure (making the push conditional, which stops schema
+  changes from ever reaching a deployed database).
+
 #### Deploying this change
 1. `prisma db push` runs on boot and will **drop** the `TriageRule` and
    `ImportJob` tables and the `enrichmentMeta` column. All three were unused.
