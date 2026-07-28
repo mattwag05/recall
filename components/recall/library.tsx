@@ -47,7 +47,6 @@ export function Library() {
   const [tagQuery, setTagQuery] = useState('')
   const [collapsedTags, setCollapsedTags] = useState<Set<string>>(new Set())
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
-  const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set())
   const [sortMode, setSortMode] = useState<LibrarySort>('updated')
   const [viewMode, setViewMode] = useState<LibraryView>('list')
   const [tagSidebarOpen, setTagSidebarOpen] = useState(true)
@@ -167,8 +166,6 @@ export function Library() {
   const visibleTags = filterTagTree(tags, tagQuery)
   const expandableTagIds = collectExpandableTagIds(tags)
   const activeTagLabel = activeTag ? flatTags.find(t => t.slug === activeTag)?.label ?? activeTag : 'All cards'
-  const visibleCardIds = sortedCards.map(card => card.id)
-  const selectedCardCount = selectedCards.size
   const readyCount = cards.filter(card => card.status === 'ready').length
   const processingCount = cards.filter(card => card.status === 'organizing' || card.status === 'summarizing').length
   const failedCount = cards.filter(card => card.status === 'failed').length
@@ -207,23 +204,6 @@ export function Library() {
     })
   }
 
-  function toggleSelectedCard(id: string) {
-    setSelectedCards(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  function selectAllVisibleCards() {
-    setSelectedCards(new Set(visibleCardIds))
-  }
-
-  function clearSelectedCards() {
-    setSelectedCards(new Set())
-  }
-
   function focusViewMode(next: LibraryView) {
     setViewMode(next)
     window.setTimeout(() => document.getElementById(libraryViewModeId(next))?.focus(), 0)
@@ -253,7 +233,6 @@ export function Library() {
 
   function pickTag(slug: string | null) {
     setActiveTag(slug)
-    setSelectedCards(new Set())
   }
 
   function savedMessage(meta: SavedContentMeta) {
@@ -427,61 +406,6 @@ export function Library() {
             </div>
           )}
 
-          <div className="mb-5 flex flex-col gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--sepia)]">
-                <button type="button" className="rounded-md bg-blue-50 px-3 py-1.5 font-medium text-[var(--accent)]">All</button>
-                <button type="button" className="rounded-md px-3 py-1.5 font-medium hover:bg-[var(--paper)]">Unread</button>
-                <button type="button" className="rounded-md px-3 py-1.5 font-medium hover:bg-[var(--paper)]">Favorites</button>
-                <button type="button" className="rounded-md px-3 py-1.5 font-medium hover:bg-[var(--paper)]">Recently added</button>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className="rr-btn rr-btn-icon"
-                  onClick={selectAllVisibleCards}
-                  disabled={visibleCardIds.length === 0}
-                  aria-label="Select all visible cards"
-                >
-                  <CheckSquare size={14} aria-hidden="true" />
-                  <span>Select all</span>
-                </button>
-                <button
-                  type="button"
-                  className="rr-btn"
-                  disabled={selectedCardCount === 0}
-                  onClick={clearSelectedCards}
-                  aria-label="Clear selected cards"
-                >
-                  Clear
-                </button>
-              </div>
-            {selectedCardCount > 0 && (
-              <div className="mt-3 flex flex-col gap-2 rr-rule pb-3 sm:flex-row sm:items-center sm:justify-between">
-                <span className="rr-mono" style={{ color: 'var(--accent)' }}>{selectedCardCount} selected</span>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="rr-btn"
-                    disabled
-                    aria-label="Export selected cards as Markdown (planned)"
-                    title="Batch Markdown export needs a selected-card export API."
-                  >
-                    Export selected
-                  </button>
-                  <button
-                    type="button"
-                    className="rr-btn"
-                    disabled
-                    aria-label="Delete selected cards (planned)"
-                    title="Batch deletion needs confirmation and a selected-card delete API."
-                  >
-                    Delete selected
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
           {!loaded && <p className="rr-mono">opening the archive…</p>}
           {loaded && !libraryError && cards.length === 0 && (
             <div className="rounded-xl border border-dashed border-[var(--card-edge)] bg-white px-6 py-16 text-center">
@@ -507,8 +431,6 @@ export function Library() {
                       key={c.id}
                       card={c}
                       index={gi * 6 + i}
-                      selected={selectedCards.has(c.id)}
-                      onToggleSelected={toggleSelectedCard}
                     />
                   ))}
                 </div>
@@ -519,8 +441,6 @@ export function Library() {
                       key={c.id}
                       card={c}
                       index={gi * 6 + i}
-                      selected={selectedCards.has(c.id)}
-                      onToggleSelected={toggleSelectedCard}
                     />
                   ))}
                 </div>
@@ -1149,13 +1069,9 @@ function StatusBadge({ status }: { status: string }) {
 function CardGridTile({
   card,
   index,
-  selected,
-  onToggleSelected,
 }: {
   card: CardListItem
   index: number
-  selected: boolean
-  onToggleSelected: (id: string) => void
 }) {
   return (
     <article
@@ -1163,18 +1079,8 @@ function CardGridTile({
       style={{
         borderRadius: 3,
         animationDelay: `${Math.min(index, 12) * 45}ms`,
-        borderColor: selected ? 'var(--accent)' : undefined,
       }}
     >
-      <label className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rr-card" style={{ borderRadius: 3 }}>
-        <input
-          type="checkbox"
-          aria-label={`Select ${card.title}`}
-          checked={selected}
-          onChange={() => onToggleSelected(card.id)}
-          className="h-3.5 w-3.5 accent-[var(--accent)]"
-        />
-      </label>
       {card.thumbnail ? (
         <Link
           href={`/item/${card.id}`}
@@ -1234,32 +1140,19 @@ function CardGridTile({
 function CardRow({
   card,
   index,
-  selected,
-  onToggleSelected,
 }: {
   card: CardListItem
   index: number
-  selected: boolean
-  onToggleSelected: (id: string) => void
 }) {
   return (
     <article
       className="group mb-3 flex gap-3 rounded-xl border bg-white p-3 rr-rise transition hover:border-blue-200 hover:shadow-sm"
       style={{
         animationDelay: `${Math.min(index, 12) * 45}ms`,
-        borderColor: selected ? 'var(--accent)' : 'var(--hairline)',
+        borderColor: 'var(--hairline)',
       }}
     >
       <span className="mt-12 hidden h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--accent)] sm:block" aria-hidden="true" />
-      <label className="pt-10">
-        <input
-          type="checkbox"
-          aria-label={`Select ${card.title}`}
-          checked={selected}
-          onChange={() => onToggleSelected(card.id)}
-          className="h-3.5 w-3.5 accent-[var(--accent)]"
-        />
-      </label>
       <div className="min-w-0 flex-1">
         <div className="flex gap-4">
         {card.thumbnail && (

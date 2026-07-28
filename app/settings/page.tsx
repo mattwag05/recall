@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import Link from 'next/link'
-import { Bot, Bug, CheckCircle2, FileQuestion, HelpCircle, KeyRound, Mail, MessageCircleQuestion, Mic, Moon, RotateCcw, Server, Settings, Sparkles, Sun, TestTube2, Volume2, type LucideIcon } from 'lucide-react'
+import { Bot, CheckCircle2, KeyRound, Moon, RotateCcw, Server, Settings, Sun, TestTube2, Volume2, type LucideIcon } from 'lucide-react'
 import { READING_SIZES, readReadingSize, writeReadingSize, type ReadingSize } from '@/lib/reading-preferences'
 import {
   DAILY_REVIEW_GOALS,
@@ -168,16 +168,6 @@ export default function SettingsPage() {
         <Row label="Plan" hint="Local desktop build">
           <span className="rr-tag">Local only</span>
         </Row>
-        <Row label="Manage subscription" hint="No cloud subscription is connected in the local build.">
-          <button
-            className="rr-btn"
-            disabled
-            aria-label="Manage cloud subscription (planned)"
-            title="Cloud subscription management is not available in the local Phase 1 build."
-          >
-            Manage
-          </button>
-        </Row>
         <Row label="Export library" hint="Download all cards, or just one tag subtree, as one Markdown file.">
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             <select
@@ -209,16 +199,6 @@ export default function SettingsPage() {
             </div>
           )}
         </Row>
-        <Row label="Update email" hint="Account identity is not wired in the local build.">
-          <button
-            className="rr-btn"
-            disabled
-            aria-label="Update account email (planned)"
-            title="Email account changes are not available in the local Phase 1 build."
-          >
-            Update
-          </button>
-        </Row>
       </Section>
 
       <Section title="Intelligence">
@@ -232,30 +212,6 @@ export default function SettingsPage() {
           >
             {enriching ? 'Working…' : 'Run now'}
           </button>
-        </Row>
-        <Row label="Default action" hint="Capture uses the Phase 1 Notebook/TL;DR pipeline.">
-          <select aria-label="Default AI action" className="rr-select w-full sm:w-56" value="concise-summary" onChange={() => {}}>
-            <option value="concise-summary">Concise summary</option>
-            <option value="detailed-summary" disabled>Detailed summary · Phase 2</option>
-            <option value="quiz" disabled>Generate quiz · Phase 3</option>
-            <option value="connections" disabled>Find connections · Phase 2</option>
-          </select>
-        </Row>
-        <Row label="Auto tagging" hint="Cards are tagged by the local enrichment pipeline.">
-          <Toggle
-            ariaLabel="Auto tagging fixed on for local enrichment"
-            checked
-            disabled
-            title="Auto tagging is part of the Phase 1 local enrichment pipeline and is not configurable yet."
-          />
-        </Row>
-        <Row label="Auto connections" hint="Connection generation arrives with Phase 2 graph work.">
-          <Toggle
-            ariaLabel="Auto connections (planned)"
-            checked={false}
-            disabled
-            title="Automatic connection generation is planned for the graph phase."
-          />
         </Row>
         {msg && <p className="rr-mono mt-2">{msg}</p>}
       </Section>
@@ -272,45 +228,13 @@ export default function SettingsPage() {
           />
         </Row>
         <Row label="Reading text size" hint="Applies to Notebook and Reader text on card detail.">
-          <ReadingSizeControl value={readingSize} onChange={updateReadingSize} />
-        </Row>
-      </Section>
-
-      <Section title="Preferences">
-        <Row label="Translation language" hint="Translation is not part of Phase 1.">
-          <select
-            aria-label="Translation language (planned)"
-            title="Translation preferences are planned for a later phase."
-            className="rr-select w-full sm:w-56"
-            value="off"
-            disabled
-            onChange={() => {}}
-          >
-            <option value="off">Off</option>
-            <option value="english">English</option>
-          </select>
-        </Row>
-        <Row label="Search language" hint="Exact text search uses local FTS today.">
-          <select
-            aria-label="Search language preference (planned)"
-            title="Search-language preferences are planned after multilingual search exists."
-            className="rr-select w-full sm:w-56"
-            value="library"
-            disabled
-            onChange={() => {}}
-          >
-            <option value="library">Library language</option>
-          </select>
-        </Row>
-        <Row label="Browser extension" hint="Extension capture is a future import path.">
-          <button
-            className="rr-btn"
-            disabled
-            aria-label="Configure browser extension capture (planned)"
-            title="Browser extension capture is planned for a later import phase."
-          >
-            Configure
-          </button>
+          <PreferenceRadioGroup
+            ariaLabel="Reading text size"
+            value={readingSize}
+            options={READING_SIZES.map(size => ({ id: size.id, label: READING_SIZE_COPY[size.id].label }))}
+            describeOption={value => READING_SIZE_COPY[value].detail}
+            onChange={updateReadingSize}
+          />
         </Row>
       </Section>
 
@@ -331,29 +255,6 @@ export default function SettingsPage() {
             options={REVIEW_SESSION_SIZES}
             describeOption={value => value === 'all' ? 'All due questions' : `${value} questions`}
             onChange={(sessionSize: ReviewSessionSize) => updateReviewPreferences({ ...reviewPreferences, sessionSize })}
-          />
-        </Row>
-        <Row label="Timed questions" hint="Card quiz sessions are live; timed modes remain planned.">
-          <Toggle ariaLabel="Timed quiz sessions (planned)" checked={false} disabled title="Timed quiz sessions are planned for the learning phase." />
-        </Row>
-        <Row label="Spaced repetition reminders" hint="Due-card notifications arrive with Phase 3 scheduling.">
-          <Toggle ariaLabel="Spaced repetition reminders (planned)" checked={false} disabled title="Due-card reminders are planned after review scheduling exists." />
-        </Row>
-        <Row label="Streak reminders" hint="Streak nudges require local notification delivery.">
-          <Toggle ariaLabel="Streak reminders (planned)" checked={false} disabled title="Streak reminder delivery is planned with local notifications." />
-        </Row>
-        <Row label="Challenge events" hint="Challenge notifications are not wired in the local build.">
-          <Toggle ariaLabel="Challenge event notifications (planned)" checked={false} disabled title="Challenge events are planned for a later review phase." />
-        </Row>
-        <Row label="Reminder time" hint="Preferred time for future review and streak notifications.">
-          <input
-            aria-label="Review reminder time (planned)"
-            title="Reminder scheduling is planned after local notifications exist."
-            type="time"
-            value="09:00"
-            disabled
-            className="rr-select w-full sm:w-36"
-            onChange={() => {}}
           />
         </Row>
       </Section>
@@ -396,43 +297,6 @@ export default function SettingsPage() {
           >
             <Volume2 size={14} aria-hidden="true" />
             <span>{sampling ? 'Playing…' : 'Sample'}</span>
-          </button>
-        </Row>
-        <Row label="Custom voices" hint="0 saved voices">
-          <button
-            className="rr-btn rr-btn-icon"
-            disabled
-            aria-label="Add custom text to speech voice (planned)"
-            title="Custom voice management is planned after local TTS playback exists."
-          >
-            <Mic size={14} aria-hidden="true" />
-            <span>Add voice</span>
-          </button>
-        </Row>
-      </Section>
-
-      <Section title="Help · Feedback">
-        <div className="grid gap-2 sm:grid-cols-2">
-          <HelpLink icon={HelpCircle} label="Docs" />
-          <HelpLink icon={FileQuestion} label="FAQ" />
-          <HelpLink icon={MessageCircleQuestion} label="Discord" />
-          <HelpLink icon={MessageCircleQuestion} label="Feature request" />
-          <HelpLink icon={Bug} label="Bug report" />
-          <HelpLink icon={Mail} label="Email support" />
-          <HelpLink icon={Sparkles} label="Social links" />
-          <HelpLink icon={Sparkles} label="What's new" />
-        </div>
-      </Section>
-
-      <Section title="Danger zone">
-        <Row label="Delete account" hint="No cloud account exists in this local build.">
-          <button
-            className="rr-btn"
-            disabled
-            aria-label="Delete cloud account (unavailable in local build)"
-            title="There is no cloud account to delete in the local Phase 1 build."
-          >
-            Delete
           </button>
         </Row>
       </Section>
@@ -846,42 +710,6 @@ function Row({ label, hint, children }: { label: string; hint: string; children:
   )
 }
 
-function Toggle({
-  ariaLabel,
-  checked,
-  disabled = false,
-  title,
-}: {
-  ariaLabel: string
-  checked: boolean
-  disabled?: boolean
-  title?: string
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-label={ariaLabel}
-      aria-checked={checked}
-      disabled={disabled}
-      title={title}
-      className="relative h-7 w-12 rounded-full border transition-colors"
-      style={{
-        borderColor: checked ? 'var(--accent)' : 'var(--hairline)',
-        background: checked ? 'var(--accent)' : 'rgba(255,255,255,0.35)',
-        opacity: disabled ? 0.55 : 1,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-      }}
-    >
-      <span
-        aria-hidden="true"
-        className="absolute top-1 h-5 w-5 rounded-full bg-[var(--card)] shadow-sm transition-transform"
-        style={{ left: checked ? '1.45rem' : '0.25rem' }}
-      />
-    </button>
-  )
-}
-
 function SegmentedControl({
   ariaLabel,
   options,
@@ -923,75 +751,6 @@ const READING_SIZE_COPY: Record<ReadingSize, { label: string; detail: string }> 
   regular: { label: 'Regular', detail: '100%' },
   large: { label: 'Large', detail: '110%' },
   wide: { label: 'Wide', detail: '120%' },
-}
-
-function ReadingSizeControl({
-  value,
-  onChange,
-}: {
-  value: ReadingSize
-  onChange: (value: ReadingSize) => void
-}) {
-  function moveFocus(nextSize: ReadingSize) {
-    window.setTimeout(() => {
-      document.getElementById(readingSizeControlId(nextSize))?.focus()
-    }, 0)
-  }
-
-  function onKeyDown(e: ReactKeyboardEvent<HTMLButtonElement>, size: ReadingSize) {
-    const currentIndex = READING_SIZES.findIndex(option => option.id === size)
-    const lastIndex = READING_SIZES.length - 1
-    let nextIndex = currentIndex
-
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextIndex = Math.min(lastIndex, currentIndex + 1)
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') nextIndex = Math.max(0, currentIndex - 1)
-    else if (e.key === 'Home') nextIndex = 0
-    else if (e.key === 'End') nextIndex = lastIndex
-    else return
-
-    e.preventDefault()
-    const next = READING_SIZES[nextIndex]
-    onChange(next.id)
-    moveFocus(next.id)
-  }
-
-  return (
-    <div
-      className="grid w-full grid-cols-2 overflow-hidden border sm:inline-grid sm:w-auto sm:grid-cols-4"
-      role="radiogroup"
-      aria-label="Reading text size"
-      style={{ borderColor: 'var(--hairline)' }}
-    >
-      {READING_SIZES.map(option => {
-        const selected = option.id === value
-        const copy = READING_SIZE_COPY[option.id]
-        return (
-          <button
-            key={option.id}
-            id={readingSizeControlId(option.id)}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            tabIndex={selected ? 0 : -1}
-            className="rr-mono flex min-w-24 flex-col items-center justify-center gap-0.5 px-3 py-2 text-center"
-            style={{
-              background: selected ? 'var(--accent)' : 'rgba(255,255,255,0.25)',
-              color: selected ? 'var(--paper)' : 'var(--sepia)',
-            }}
-            onClick={() => onChange(option.id)}
-            onKeyDown={e => onKeyDown(e, option.id)}
-          >
-            <span>{copy.label}</span>
-            <span style={{ fontSize: '0.72rem', opacity: 0.78 }}>{copy.detail}</span>
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function readingSizeControlId(size: ReadingSize) {
-  return `reading-size-${size}`
 }
 
 function PreferenceRadioGroup<T extends string | number>({
@@ -1066,20 +825,5 @@ function PreferenceRadioGroup<T extends string | number>({
         )
       })}
     </div>
-  )
-}
-
-function HelpLink({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
-  return (
-    <button
-      type="button"
-      className="rr-btn rr-btn-icon w-full justify-start"
-      disabled
-      aria-label={`${label} help link (planned)`}
-      title={`${label} destination is planned for a later help and feedback phase.`}
-    >
-      <Icon size={14} aria-hidden="true" />
-      <span>{label}</span>
-    </button>
   )
 }
