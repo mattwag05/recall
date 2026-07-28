@@ -43,8 +43,10 @@ check('the push carries --accept-data-loss', () => {
 
 check('the push is unconditional', () => {
   // A guard around the push is how schema changes silently stopped applying.
+  // Match a shell `if` at the start of a line — a bare /if/ also hits the
+  // "specific" in this file's own comments.
   assert.ok(
-    !/if\s.*prisma db push/s.test(boot),
+    !/^\s*if\b/m.test(boot),
     'the push must not be conditional on the database already existing',
   )
 })
@@ -57,7 +59,7 @@ check('initFts recreates the FTS table when missing', () => {
 
 check('initFts repopulates an empty index from Bookmark', () => {
   // This is what makes dropping the FTS tables on boot recoverable.
-  assert.match(fts, /ftsCount === 0 && bookmarkCount > 0.*populateFts/s)
+  assert.match(fts, /ftsCount === 0 && bookmarkCount > 0[\s\S]*populateFts/)
 })
 
 console.log(`\nBoot schema: ${passed} passed, ${failed} failed`)
