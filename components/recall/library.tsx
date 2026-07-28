@@ -279,17 +279,17 @@ export function Library() {
           collapseAllTags={collapseAllTags}
         />
 
-        <div className="min-w-0 border-x border-[var(--hairline)] bg-white/85 backdrop-blur-sm">
-          <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-[var(--hairline)] bg-white/90 px-4 backdrop-blur md:px-6">
+        <div className="min-w-0 border-x border-[var(--hairline)] bg-[var(--card)]/85 backdrop-blur-sm">
+          <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-[var(--hairline)] bg-[var(--card)]/90 px-4 backdrop-blur md:px-6">
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--paper)] px-3 py-2 text-left text-sm text-[var(--sepia)] transition hover:border-slate-300 hover:bg-white"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--paper)] px-3 py-2 text-left text-sm text-[var(--sepia)] transition hover:border-[var(--btn-hover-edge)] hover:bg-[var(--btn-hover-bg)]"
               onClick={() => setSearchOpen(true)}
               aria-label="Search your library or ask Recall"
             >
               <Search size={16} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate">Search your library, ask anything, or run a command...</span>
-              <kbd className="rounded-md border border-[var(--hairline)] bg-white px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--sepia)]">/</kbd>
+              <kbd className="rounded-md border border-[var(--hairline)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--sepia)]">/</kbd>
             </button>
             <button className="rr-btn rr-btn-accent rr-btn-icon shrink-0" onClick={() => openAdd('url')}>
               <Plus size={15} aria-hidden="true" />
@@ -360,7 +360,7 @@ export function Library() {
                         onKeyDown={e => onViewModeKeyDown(e, option.id)}
                         aria-checked={selected}
                         tabIndex={selected ? 0 : -1}
-                        style={selected ? { borderColor: 'var(--accent)', color: 'var(--accent)', background: '#eff6ff' } : undefined}
+                        style={selected ? { borderColor: 'var(--accent)', color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 15%, transparent)' } : undefined}
                       >
                         <Icon size={14} aria-hidden="true" />
                         <span>{option.label}</span>
@@ -409,7 +409,7 @@ export function Library() {
 
           {!loaded && <p className="rr-mono">opening the archive…</p>}
           {loaded && !libraryError && cards.length === 0 && (
-            <div className="rounded-xl border border-dashed border-[var(--card-edge)] bg-white px-6 py-16 text-center">
+            <div className="rounded-xl border border-dashed border-[var(--card-edge)] bg-[var(--card)] px-6 py-16 text-center">
               <p className="font-display text-xl font-semibold">Your library is empty.</p>
               <p className="rr-prose mt-2">Save your first article, transcript, note, or PDF to start building local memory.</p>
               <button className="rr-btn rr-btn-accent rr-btn-icon mt-5 mx-auto" onClick={() => openAdd('url')}>
@@ -590,7 +590,7 @@ function ShellNav({
   ]
 
   return (
-    <aside className="hidden min-h-screen border-r border-[var(--hairline)] bg-white/78 px-3 py-4 backdrop-blur lg:flex lg:flex-col">
+    <aside className="hidden min-h-screen border-r border-[var(--hairline)] bg-[var(--paper-2)]/80 px-3 py-4 backdrop-blur lg:flex lg:flex-col">
       <div className="mb-8 flex items-center justify-between px-1">
         <Link href="/items" className="flex items-center gap-3" aria-label="Recall library">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--accent)] text-white shadow-[0_8px_24px_rgba(37,99,235,0.22)]">
@@ -615,7 +615,7 @@ function ShellNav({
             <Link
               key={item.label}
               href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${item.active ? 'bg-blue-50 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--ink)]'}`}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${item.active ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--ink)]'}`}
             >
               <Icon size={17} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -642,7 +642,7 @@ function ShellNav({
 
           <button
             onClick={() => onPickTag(null)}
-            className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium ${activeTag === null ? 'bg-blue-50 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)]'}`}
+            className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium ${activeTag === null ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-[var(--ink-soft)] hover:bg-[var(--paper)]'}`}
           >
             <span className="flex items-center gap-2"><Inbox size={15} aria-hidden="true" /> All items</span>
             <span className="font-mono text-xs text-[var(--sepia)]">{cardCount}</span>
@@ -657,7 +657,7 @@ function ShellNav({
           </button>
 
           {selectedTagCount > 0 && (
-            <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+            <div className="mb-3 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/12 px-3 py-2">
               <div className="rr-mono text-[var(--accent)]">{selectedTagCount} selected</div>
               <button type="button" onClick={clearSelectedTags} className="mt-1 text-xs font-medium text-[var(--accent)]">Clear selection</button>
             </div>
@@ -670,7 +670,7 @@ function ShellNav({
             </div>
           )}
 
-          <label className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--hairline)] bg-white px-2">
+          <label className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--hairline)] bg-[var(--card)] px-2">
             <Search size={13} aria-hidden="true" style={{ color: 'var(--sepia)' }} />
             <input
               aria-label="Filter tags"
@@ -767,7 +767,7 @@ function InsightRail({
           <MetricRow icon={Bot} label="Model" value="Local" />
           <MetricRow icon={Cpu} label="Embeddings" value="Ready" />
           <MetricRow icon={Circle} label="Status" value={processingCount > 0 ? 'Running' : 'Idle'} />
-          <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          <div className="mt-3 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/12 px-3 py-2 text-sm text-[var(--success)]">
             All active features run locally.
           </div>
         </RailPanel>
@@ -776,7 +776,7 @@ function InsightRail({
           <RailPanel title="Recent">
             <div className="space-y-2">
               {recentCards.map(card => (
-                <Link key={card.id} href={`/item/${card.id}`} className="block rounded-lg px-2 py-1.5 hover:bg-white">
+                <Link key={card.id} href={`/item/${card.id}`} className="block rounded-lg px-2 py-1.5 hover:bg-[var(--paper)]">
                   <span className="block truncate text-sm font-medium">{card.title}</span>
                   <span className="block font-mono text-xs text-[var(--sepia)]">{relativeTime(card.updatedAt)}</span>
                 </Link>
@@ -791,7 +791,7 @@ function InsightRail({
 
 function RailPanel({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-[var(--hairline)] bg-white p-4 shadow-sm">
+    <section className="rounded-xl border border-[var(--hairline)] bg-[var(--card)] p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="rr-mono text-[var(--ink)]">{title}</h2>
         {action && <span className="text-xs font-medium text-[var(--accent)]">{action}</span>}
@@ -954,11 +954,11 @@ function QuickTile({
       disabled={disabled}
       aria-label={disabled ? disabledAriaLabel ?? `${label} capture (planned)` : label}
       title={disabled ? disabledTitle ?? `${label} capture is planned for a later phase.` : undefined}
-      className="rr-card text-left px-4 py-3 transition enabled:hover:-translate-y-0.5 enabled:hover:border-blue-200 enabled:hover:shadow-md"
+      className="rr-card text-left px-4 py-3 transition enabled:hover:-translate-y-0.5 enabled:hover:border-[var(--accent)]/40 enabled:hover:shadow-md"
       style={{ borderRadius: 10, opacity: disabled ? 0.62 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
     >
       <div className="flex items-start gap-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-[var(--accent)]">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--accent)]/15 text-[var(--accent)]">
           <Icon size={16} aria-hidden="true" style={{ strokeWidth: 1.9 }} />
         </span>
         <div className="min-w-0">
@@ -1144,7 +1144,7 @@ function CardRow({
 }) {
   return (
     <article
-      className="group mb-3 flex gap-3 rounded-xl border bg-white p-3 rr-rise transition hover:border-blue-200 hover:shadow-sm"
+      className="group mb-3 flex gap-3 rounded-xl border bg-[var(--card)] p-3 rr-rise transition hover:border-[var(--accent)]/40 hover:shadow-sm"
       style={{
         animationDelay: `${Math.min(index, 12) * 45}ms`,
         borderColor: 'var(--hairline)',

@@ -2,8 +2,9 @@
 
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import Link from 'next/link'
-import { Bot, CheckCircle2, KeyRound, Moon, RotateCcw, Server, Settings, Sun, TestTube2, Volume2, type LucideIcon } from 'lucide-react'
+import { Bot, CheckCircle2, KeyRound, Moon, RotateCcw, Server, Sun, TestTube2, Volume2, type LucideIcon } from 'lucide-react'
 import { READING_SIZES, readReadingSize, writeReadingSize, type ReadingSize } from '@/lib/reading-preferences'
+import { setTheme, useTheme } from '@/components/recall/theme-toggle'
 import {
   DAILY_REVIEW_GOALS,
   DEFAULT_REVIEW_PREFERENCES,
@@ -29,6 +30,7 @@ export default function SettingsPage() {
   const [reviewPreferences, setReviewPreferences] = useState<ReviewPreferences>(DEFAULT_REVIEW_PREFERENCES)
   const [ttsVoice, setTtsVoice] = useState<string>(DEFAULT_TTS_VOICE)
   const [sampling, setSampling] = useState(false)
+  const theme = useTheme()
 
   useEffect(() => {
     let cancelled = false
@@ -217,13 +219,12 @@ export default function SettingsPage() {
       </Section>
 
       <Section title="Appearance">
-        <Row label="Theme" hint="Reading Room currently ships as a light local theme.">
+        <Row label="Theme" hint="Recall ships dark. Light is remembered on this device.">
           <SegmentedControl
             ariaLabel="Theme"
             options={[
-              { label: 'Light', icon: Sun, active: true },
-              { label: 'System', icon: Settings, disabled: true, title: 'System theme switching is planned for a later settings phase.' },
-              { label: 'Dark', icon: Moon, disabled: true, title: 'Dark theme switching is planned for a later settings phase.' },
+              { label: 'Dark', icon: Moon, active: theme === 'dark', onClick: () => setTheme('dark') },
+              { label: 'Light', icon: Sun, active: theme === 'light', onClick: () => setTheme('light') },
             ]}
           />
         </Row>
@@ -715,7 +716,7 @@ function SegmentedControl({
   options,
 }: {
   ariaLabel: string
-  options: { label: string; icon: LucideIcon; active?: boolean; disabled?: boolean; title?: string }[]
+  options: { label: string; icon: LucideIcon; active?: boolean; disabled?: boolean; title?: string; onClick?: () => void }[]
 }) {
   return (
     <div className="inline-flex w-full overflow-hidden border sm:w-auto" role="radiogroup" aria-label={ariaLabel} style={{ borderColor: 'var(--hairline)' }}>
@@ -727,13 +728,14 @@ function SegmentedControl({
             type="button"
             role="radio"
             aria-checked={option.active === true}
-            aria-label={option.disabled ? `${option.label} theme (planned)` : option.label}
+            aria-label={option.label}
             disabled={option.disabled}
             title={option.title}
+            onClick={option.onClick}
             className="rr-mono flex flex-1 items-center justify-center gap-1.5 px-3 py-2 sm:flex-none"
             style={{
-              background: option.active ? 'var(--accent)' : 'rgba(255,255,255,0.25)',
-              color: option.active ? 'var(--paper)' : 'var(--sepia)',
+              background: option.active ? 'var(--accent-fill)' : 'var(--card)',
+              color: option.active ? '#ffffff' : 'var(--sepia)',
               opacity: option.disabled ? 0.5 : 1,
             }}
           >
@@ -813,8 +815,8 @@ function PreferenceRadioGroup<T extends string | number>({
             tabIndex={selected ? 0 : -1}
             className="rr-mono flex min-w-20 flex-col items-center justify-center gap-0.5 px-3 py-2 text-center"
             style={{
-              background: selected ? 'var(--accent)' : 'rgba(255,255,255,0.25)',
-              color: selected ? 'var(--paper)' : 'var(--sepia)',
+              background: selected ? 'var(--accent-fill)' : 'var(--card)',
+              color: selected ? '#ffffff' : 'var(--sepia)',
             }}
             onClick={() => onChange(option.id)}
             onKeyDown={e => onKeyDown(e, option.id)}

@@ -2,28 +2,70 @@
 
 /*
   Recall — product OS aesthetic.
-  Quiet local-first knowledge tool: graphite chrome, clean surfaces, cobalt focus.
+  Quiet local-first knowledge tool: graphite chrome, clean surfaces, violet focus.
+
+  Dark is the default. Light lives under [data-theme="light"] and is set by the
+  toggle in Settings; app/layout.tsx applies the stored choice before first
+  paint. Every colour is a token here — components never hardcode one — so a
+  theme is exactly this block.
+
+  Contrast (WCAG 2.1, measured against --card):
+    --ink 15.3   --ink-soft 11.8   --sepia 6.9   --accent 6.4   --gold 9.4
+    --sepia-2 3.6 is deliberately decorative-tier (dividers, disabled hints).
+    --accent is the violet that stays legible as TEXT; --accent-fill is the
+    darker violet that keeps white button text at 5.7.
 */
 
 :root {
-  --paper:      #f7f8fb;
-  --paper-2:    #eef2f8;
-  --card:       #ffffff;
-  --card-edge:  #dfe5ee;
-  --ink:        #12151b;
-  --ink-soft:   #3f4652;
-  --sepia:      #667085;
-  --sepia-2:    #98a2b3;
-  --accent:     #2563eb;
-  --accent-2:   #1d4ed8;
-  --gold:       #0f766e;
-  --hairline:   #e5e9f0;
-  --hairline-2: #f0f3f8;
-  --success:    #22c55e;
-  --warning:    #f59e0b;
-  --danger:     #dc2626;
+  --paper:       #0f0f0f;
+  --paper-2:     #161616;
+  --card:        #1a1a1a;
+  --card-edge:   #2a2a2a;
+  --ink:         #f0f0f0;
+  --ink-soft:    #d1d5db;
+  --sepia:       #9ca3af;
+  --sepia-2:     #6b7280;
+  --accent:      #a78bfa;
+  --accent-2:    #6d28d9;
+  --accent-fill: #7c3aed;
+  --gold:        #2dd4bf;
+  --hairline:    #2a2a2a;
+  --hairline-2:  #222222;
+  --success:     #4ade80;
+  --warning:     #fbbf24;
+  --danger:      #f87171;
+  --tag-bg:        #222222;
+  --btn-hover-bg:  #222222;
+  --btn-hover-edge:#3a3a3a;
+  --input-bg:      #1a1a1a;
+  --placeholder:   #6b7280;
   --rr-safe-bottom-mobile: 10rem;
   --rr-safe-bottom-desktop: 6rem;
+}
+
+:root[data-theme="light"] {
+  --paper:       #f7f8fb;
+  --paper-2:     #eef2f8;
+  --card:        #ffffff;
+  --card-edge:   #dfe5ee;
+  --ink:         #12151b;
+  --ink-soft:    #3f4652;
+  --sepia:       #667085;
+  --sepia-2:     #98a2b3;
+  --accent:      #2563eb;
+  --accent-2:    #1d4ed8;
+  --accent-fill: #2563eb;
+  --gold:        #0f766e;
+  --hairline:    #e5e9f0;
+  --hairline-2:  #f0f3f8;
+  --success:     #22c55e;
+  --warning:     #f59e0b;
+  --danger:      #dc2626;
+  --tag-bg:        #f3f5f9;
+  --btn-hover-bg:  #f8fafc;
+  --btn-hover-edge:#cbd5e1;
+  --input-bg:      #ffffff;
+  --placeholder:   #94a3b8;
 }
 
 @theme inline {
@@ -37,6 +79,7 @@
   --color-sepia-2: var(--sepia-2);
   --color-accent: var(--accent);
   --color-accent-2: var(--accent-2);
+  --color-accent-fill: var(--accent-fill);
   --color-gold: var(--gold);
   --color-hairline: var(--hairline);
   --color-hairline-2: var(--hairline-2);
@@ -47,6 +90,9 @@
 }
 
 html {
+  color-scheme: dark;
+}
+html[data-theme="light"] {
   color-scheme: light;
 }
 
@@ -71,6 +117,11 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
+    radial-gradient(circle at 12% 0%, rgba(167, 139, 250, 0.07), transparent 24rem),
+    linear-gradient(180deg, rgba(22,22,22,0.9), rgba(15,15,15,0.75));
+}
+:root[data-theme="light"] body::before {
+  background:
     radial-gradient(circle at 12% 0%, rgba(37, 99, 235, 0.06), transparent 24rem),
     linear-gradient(180deg, rgba(255,255,255,0.86), rgba(247,248,251,0.72));
 }
@@ -78,6 +129,9 @@ body::before {
 #__app, main, .rr-z { position: relative; z-index: 1; }
 
 ::selection {
+  background: rgba(167, 139, 250, 0.28);
+}
+:root[data-theme="light"] ::selection {
   background: rgba(37, 99, 235, 0.18);
 }
 
@@ -92,7 +146,7 @@ a { color: inherit; }
 
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 6px; border: 2px solid var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--card-edge); border-radius: 6px; border: 2px solid var(--paper); }
 ::-webkit-scrollbar-thumb:hover { background: var(--sepia-2); }
 
 /* ── Reusable Recall UI utilities ────────────────────────────── */
@@ -123,7 +177,7 @@ a { color: inherit; }
   border: 1px solid var(--hairline);
   border-radius: 6px;
   padding: 0.13rem 0.48rem;
-  background: #f3f5f9;
+  background: var(--tag-bg);
   transition: all 0.18s ease;
 }
 .rr-tag:hover { border-color: var(--accent); color: var(--accent); }
@@ -131,6 +185,9 @@ a { color: inherit; }
 .rr-card {
   background: var(--card);
   border: 1px solid var(--card-edge);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+:root[data-theme="light"] .rr-card {
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
 
@@ -150,7 +207,7 @@ a { color: inherit; }
   transition: all 0.18s ease;
   cursor: pointer;
 }
-.rr-btn:hover { border-color: #cbd5e1; background: #f8fafc; color: var(--ink); }
+.rr-btn:hover { border-color: var(--btn-hover-edge); background: var(--btn-hover-bg); color: var(--ink); }
 .rr-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .rr-btn:disabled:hover { background: transparent; color: var(--ink); }
 .rr-btn-icon svg { flex: 0 0 auto; stroke-width: 1.8; }
@@ -160,13 +217,13 @@ a { color: inherit; }
 }
 
 .rr-btn-accent {
-  border-color: var(--accent);
+  border-color: var(--accent-fill);
   color: #ffffff;
-  background: var(--accent);
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.18);
+  background: var(--accent-fill);
+  box-shadow: 0 10px 24px rgba(124, 58, 237, 0.28);
 }
 .rr-btn-accent:hover { background: var(--accent-2); border-color: var(--accent-2); }
-.rr-btn-accent:disabled:hover { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+.rr-btn-accent:disabled:hover { background: var(--accent-fill); color: #ffffff; border-color: var(--accent-fill); }
 
 .rr-btn-plain {
   display: inline-flex;
@@ -183,12 +240,12 @@ a { color: inherit; }
   letter-spacing: 0;
   color: var(--ink);
   border: 1px solid var(--hairline);
-  background: #ffffff;
+  background: var(--input-bg);
   border-radius: 7px;
   padding: 0.48rem 0.65rem;
   outline: none;
 }
-.rr-input::placeholder { color: #94a3b8; }
+.rr-input::placeholder { color: var(--placeholder); }
 .rr-select:focus,
 .rr-input:focus { border-color: var(--accent); }
 

@@ -838,7 +838,7 @@ export function CardDetailView({
         {card.readTime && <span className="rr-mono">{card.readTime} min read</span>}
         {processing && !processingStalled && <span className="rr-mono" style={{ color: 'var(--gold)' }}>● {card.status}…</span>}
         {processing && processingStalled && (
-          <span className="rr-mono" style={{ color: 'var(--warning, #f59e0b)' }}>
+          <span className="rr-mono" style={{ color: 'var(--warning)' }}>
             ⚠ still {card.status} — taking longer than expected.{' '}
             <button
               className="rr-link"
@@ -3130,15 +3130,15 @@ function graphEdgeStyle(kind: GraphEdgeKind): { stroke: string; strokeWidth: num
     case 'manual':
       return { stroke: 'var(--accent)', strokeWidth: 1.7, opacity: 0.72 }
     case 'incoming':
-      return { stroke: '#5f4a3a', strokeWidth: 1.7, opacity: 0.68 }
+      return { stroke: 'var(--gold)', strokeWidth: 1.7, opacity: 0.68 }
     case 'linked':
-      return { stroke: '#7c6a57', strokeWidth: 1.35, opacity: 0.62 }
+      return { stroke: 'var(--ink-soft)', strokeWidth: 1.35, opacity: 0.62 }
     case 'entity':
-      return { stroke: '#8b6f3d', strokeWidth: 1.15, strokeDasharray: '4 3', opacity: 0.62 }
+      return { stroke: 'var(--warning)', strokeWidth: 1.15, strokeDasharray: '4 3', opacity: 0.62 }
     case 'related':
-      return { stroke: '#47635a', strokeWidth: 1.15, strokeDasharray: '2 3', opacity: 0.62 }
+      return { stroke: 'var(--success)', strokeWidth: 1.15, strokeDasharray: '2 3', opacity: 0.62 }
     case 'context':
-      return { stroke: '#6f675e', strokeWidth: 1, strokeDasharray: '1 4', opacity: 0.54 }
+      return { stroke: 'var(--sepia-2)', strokeWidth: 1, strokeDasharray: '1 4', opacity: 0.54 }
   }
 }
 
