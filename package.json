@@ -10,6 +10,7 @@
     "prisma": "prisma",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:demo": "tsx prisma/seed.ts --demo",
     "db:studio": "prisma studio",
     "test": "tsx scripts/check-xss-sanitization.ts && tsx scripts/check-error-leak.ts && tsx scripts/check-url-safety.ts && tsx scripts/check-triage.ts && tsx scripts/check-boot-schema.ts && tsx scripts/check-local-ai-fallbacks.ts && tsx scripts/check-quiz-mcq.ts && tsx scripts/check-review-activity.ts && tsx scripts/check-tts.ts && tsx scripts/check-media-transcription.ts && tsx scripts/check-force-layout.ts && tsx scripts/check-app-preferences.ts && tsx scripts/check-knowledge-graph.ts && tsx scripts/check-library-view.ts && tsx scripts/check-tag-crud.ts && tsx scripts/check-markdown-links.ts && tsx scripts/check-card-panes.ts && tsx scripts/check-quiz-review-batch.ts"
   },
