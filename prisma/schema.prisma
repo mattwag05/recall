@@ -31,6 +31,7 @@ model Bookmark {
   body           String?   // = Recall "readerContent": full extracted article/transcript text
   summary        String?   // short 1-2 sentence summary
   notebookContent String?  // = Recall "Notebook": editable rich AI summary (markdown), survives regen
+  readerReformatted String? // LLM-tidied Reader markdown. Never overwrites `body`; the original stays authoritative.
   sourceType     String    @default("social") // "social", "url", "wiki", "pasted", "document", "image", "media"
   status         String    @default("ready")  // organizing | summarizing | ready | failed (processing pipeline)
   triageStatus   String    @default("new")    // new | reviewed | pinned | archived (inbox queue membership)

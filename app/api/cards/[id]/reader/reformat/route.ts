@@ -45,6 +45,15 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
     const cleaned = reformatted.trim()
     if (!cleaned) return NextResponse.json({ error: 'The local model returned an empty Reader reformat.' }, { status: 503 })
+
+    // Persist so the result survives a reload and follows the user to another
+    // browser. `body` is untouched: the original extraction stays authoritative
+    // and the Reader can always fall back to it.
+    await getPrisma().bookmark.update({
+      where: { id },
+      data: { readerReformatted: cleaned },
+    })
+
     return NextResponse.json({
       ok: true,
       reformatted: cleaned,

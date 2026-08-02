@@ -16,7 +16,18 @@ import {
   type ReviewSessionSize,
 } from '@/lib/review-preferences'
 import { TTS_LANGUAGES, DEFAULT_TTS_VOICE, readTtsVoice, writeTtsVoice, languageForVoice, voicesForLanguage } from '@/lib/tts-preferences'
+import { DEFAULT_PREFERENCES, SUPPORTED_LANGUAGES, type AppPreferences, type SummaryDepth } from '@/lib/app-preferences'
 import type { TagNode } from '@/lib/recall-types'
+
+// Spelled out here rather than in lib/app-preferences.ts so the server module
+// stays free of UI copy.
+const SUMMARY_DEPTH_COPY: Record<SummaryDepth, { label: string; detail: string }> = {
+  concise: { label: 'Concise', detail: 'TL;DR plus 4 to 8 key points' },
+  detailed: { label: 'Detailed', detail: 'TL;DR, 8 to 14 key points, and per-theme sections' },
+  off: { label: 'Off', detail: 'Skip summarization; no notebook is generated' },
+}
+
+const ON_OFF = [{ id: 'on' as const, label: 'On' }, { id: 'off' as const, label: 'Off' }]
 
 export default function SettingsPage() {
   const [enriching, setEnriching] = useState(false)
@@ -30,6 +41,8 @@ export default function SettingsPage() {
   const [reviewPreferences, setReviewPreferences] = useState<ReviewPreferences>(DEFAULT_REVIEW_PREFERENCES)
   const [ttsVoice, setTtsVoice] = useState<string>(DEFAULT_TTS_VOICE)
   const [sampling, setSampling] = useState(false)
+  const [preferences, setPreferences] = useState<AppPreferences>(DEFAULT_PREFERENCES)
+  const [preferencesMsg, setPreferencesMsg] = useState<string | null>(null)
   const theme = useTheme()
 
   useEffect(() => {
@@ -38,8 +51,44 @@ export default function SettingsPage() {
     setReviewPreferences(readReviewPreferences())
     setTtsVoice(readTtsVoice())
     loadTags(() => cancelled)
+    loadPreferences(() => cancelled)
     return () => { cancelled = true }
   }, [])
+
+  async function loadPreferences(cancelled: () => boolean = () => false) {
+    try {
+      const res = await fetch('/api/settings/preferences')
+      if (!res.ok) throw new Error('load failed')
+      const data = await res.json()
+      if (!cancelled() && data?.preferences) setPreferences(data.preferences as AppPreferences)
+    } catch {
+      // Leave the defaults showing. They are what the server falls back to
+      // anyway, so the form is not lying about the effective behavior.
+      if (!cancelled()) setPreferencesMsg('Could not load content preferences; showing defaults.')
+    }
+  }
+
+  // Optimistic: the control moves immediately, and reverts with a message if
+  // the write fails. A preference that silently did not save is worse than a
+  // control that visibly snaps back.
+  async function updatePreferences(patch: Partial<AppPreferences>) {
+    const previous = preferences
+    setPreferences({ ...preferences, ...patch })
+    setPreferencesMsg(null)
+    try {
+      const res = await fetch('/api/settings/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (!res.ok) throw new Error('save failed')
+      const data = await res.json()
+      if (data?.preferences) setPreferences(data.preferences as AppPreferences)
+    } catch {
+      setPreferences(previous)
+      setPreferencesMsg('Could not save that preference. It has been reverted.')
+    }
+  }
 
   async function loadTags(cancelled: () => boolean = () => false) {
     setTagLoadMsg(null)
@@ -216,6 +265,52 @@ export default function SettingsPage() {
           </button>
         </Row>
         {msg && <p className="rr-mono mt-2">{msg}</p>}
+      </Section>
+
+      <Section title="Content">
+        <Row
+          label="Auto summarization"
+          hint="How much notebook to generate for a new card. Off skips the summarization stage entirely."
+        >
+          <PreferenceRadioGroup
+            ariaLabel="Auto summarization"
+            value={preferences.autoSummarize}
+            options={(['concise', 'detailed', 'off'] as SummaryDepth[]).map(id => ({ id, label: SUMMARY_DEPTH_COPY[id].label }))}
+            describeOption={value => SUMMARY_DEPTH_COPY[value].detail}
+            onChange={(autoSummarize: SummaryDepth) => updatePreferences({ autoSummarize })}
+          />
+        </Row>
+        <Row label="Auto tagging" hint="Run semantic tagging and categorization on new cards.">
+          <PreferenceRadioGroup
+            ariaLabel="Auto tagging"
+            value={preferences.autoTagging ? 'on' : 'off'}
+            options={ON_OFF}
+            describeOption={value => value === 'on' ? 'Tag and categorize new cards' : 'Leave new cards untagged'}
+            onChange={(value: 'on' | 'off') => updatePreferences({ autoTagging: value === 'on' })}
+          />
+        </Row>
+        <Row label="Auto connections" hint="Link new cards to related cards and extracted entities.">
+          <PreferenceRadioGroup
+            ariaLabel="Auto connections"
+            value={preferences.autoConnections ? 'on' : 'off'}
+            options={ON_OFF}
+            describeOption={value => value === 'on' ? 'Generate entity links on new cards' : 'Only manual links'}
+            onChange={(value: 'on' | 'off') => updatePreferences({ autoConnections: value === 'on' })}
+          />
+        </Row>
+        <Row label="AI language" hint="Language generated notebooks and summaries are written in. Applies to newly enriched cards, not existing ones.">
+          <select
+            aria-label="AI language"
+            className="rr-select"
+            value={preferences.aiLanguage}
+            onChange={e => updatePreferences({ aiLanguage: e.target.value })}
+          >
+            {SUPPORTED_LANGUAGES.map(language => (
+              <option key={language} value={language}>{language}</option>
+            ))}
+          </select>
+        </Row>
+        {preferencesMsg && <p className="rr-mono mt-2">{preferencesMsg}</p>}
       </Section>
 
       <Section title="Appearance">

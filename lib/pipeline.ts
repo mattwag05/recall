@@ -4,7 +4,7 @@ import { tagBookmarks } from './semantic-tagger'
 import { classifyBookmarks } from './categorizer'
 import { indexBookmark } from './fts'
 import { summarizeBookmarks, type SummarizeInput } from './summarizer'
-import { generateNotebooks, extractTldr, fallbackNotebook } from './notebook'
+import { generateNotebooks, extractTldr, fallbackNotebook, type NotebookStyle } from './notebook'
 import { embedBookmark, storeBookmarkEmbedding } from './embeddings'
 import { generateEntityConnections } from './connections'
 
@@ -15,6 +15,8 @@ export interface PipelineProgress {
 export interface PipelineOptions {
   batchSize?: number  // default 20
   stages?: PipelineProgress['stage'][]
+  /** Notebook depth and language, from the user's content preferences. */
+  notebookStyle?: NotebookStyle
 }
 
 const ALL_STAGES: Array<PipelineProgress['stage']> = [
@@ -30,6 +32,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
   const {
     batchSize = 20,
     stages = ALL_STAGES,
+    notebookStyle,
   } = options
 
   const prisma = getPrisma()
@@ -238,6 +241,8 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
 
     const notebooks = await generateNotebooks(
       withContent.map(b => ({ id: b.id, title: b.title, text: b.text, body: b.body })),
+      undefined,
+      notebookStyle,
     )
 
     const remainingForSummary: SummarizeInput[] = []
@@ -287,7 +292,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<{ proc
     }
 
     if (remainingForSummary.length > 0) {
-      const summaries = await summarizeBookmarks(remainingForSummary)
+      const summaries = await summarizeBookmarks(remainingForSummary, undefined, notebookStyle?.language)
       for (const [id, summary] of summaries) {
         try {
           const updated = await prisma.bookmark.update({ where: { id }, data: { summary, status: 'ready' } })

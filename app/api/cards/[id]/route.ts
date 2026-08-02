@@ -88,6 +88,8 @@ export async function GET(_req: Request, { params }: Ctx) {
           },
           orderBy: { createdAt: 'desc' },
         },
+        // Feeds the card-detail image gallery.
+        mediaItems: { select: { id: true, type: true, url: true, thumbnailUrl: true, localPath: true } },
         _count: { select: { quizQuestions: true } },
       },
     })
@@ -108,6 +110,7 @@ export async function GET(_req: Request, { params }: Ctx) {
         shareId: b.shareId,
         summary: b.summary,
         readerContent: b.body ?? '',
+        readerReformatted: b.readerReformatted ?? '',
         notebookContent: b.notebookContent ?? '',
         notes: b.notes ?? '',
         readTime: b.body ? readTimeMinutes(b.body) : null,
@@ -119,6 +122,7 @@ export async function GET(_req: Request, { params }: Ctx) {
           ...question,
           options: parseQuestionOptions(question.options),
         })),
+        media: b.mediaItems,
         quizQuestionCount: b._count.quizQuestions,
         createdAt: b.importedAt,
         updatedAt: b.updatedAt,
