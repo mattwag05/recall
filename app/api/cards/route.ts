@@ -23,6 +23,9 @@ const CARD_SELECT = {
   importedAt: true,
   updatedAt: true,
   categories: { select: { category: { select: { name: true, slug: true, color: true } } } },
+  // Inbound connection count for the library's "Inbound connections" ordering.
+  // A relation count in the same query, not one round trip per card.
+  _count: { select: { connectionsIn: true } },
 } as const
 
 const SEMANTIC_CARD_SELECT = {
@@ -48,6 +51,7 @@ type Row = {
   importedAt: Date
   updatedAt: Date
   categories: { category: { name: string; slug: string; color: string } }[]
+  _count: { connectionsIn: number }
 }
 
 type SemanticRow = Row & {
@@ -72,6 +76,7 @@ function toCard(b: Row) {
     createdAt: b.importedAt,
     updatedAt: b.updatedAt,
     tags: b.categories.map(c => c.category),
+    inboundCount: b._count.connectionsIn,
   }
 }
 
@@ -120,6 +125,13 @@ export async function GET(request: Request) {
     else if (triageView !== 'all') where.triageStatus = { not: 'archived' }
     if (idFilter) where.id = { in: idFilter }
     if (date) where.updatedAt = { gte: date }
+    // ?untagged=1 is the sidebar's "Untagged cards" bucket. Mutually exclusive
+    // with ?tag= (a card cannot be both untagged and inside a tag subtree).
+    const untagged = searchParams.get('untagged') === '1'
+    if (untagged && tag) {
+      return NextResponse.json({ error: 'Use either tag or untagged, not both.' }, { status: 400 })
+    }
+    if (untagged) where.categories = { none: {} }
     if (tag) {
       const tagSlugs = await getCategorySubtreeSlugs(prisma, tag)
       if (tagSlugs.length === 0) return NextResponse.json({ error: 'Tag not found' }, { status: 404 })
@@ -149,9 +161,15 @@ export async function GET(request: Request) {
     if (idFilter) {
       const order = new Map(idFilter.map((id, i) => [id, i]))
       cards = cards.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+      return NextResponse.json({ cards })
     }
 
-    return NextResponse.json({ cards })
+    // Real spaced-repetition backlog for the library's Review counter: questions
+    // whose next review has come due. Indexed on dueAt, so it rides along free
+    // rather than costing the client another round trip.
+    const reviewDue = await prisma.quizQuestion.count({ where: { dueAt: { lte: new Date() } } })
+
+    return NextResponse.json({ cards, reviewDue })
   } catch (err) {
     return apiError('Could not load cards', err, 500)
   }

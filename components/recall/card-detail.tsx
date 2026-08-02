@@ -1,25 +1,39 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { AtSign, Check, Eye, Link2, Maximize2, MessageCircle, Minus, MoreHorizontal, Pencil, Plus, RotateCcw, Settings, SlidersHorizontal, Trash2, Type, X } from 'lucide-react'
-import { markdownHeadings, renderMarkdown, renderReader } from '@/lib/markdown-render'
+import { AtSign, Check, Eye, Link2, Maximize2, MessageCircle, Minus, MoreHorizontal, PanelRight, Pencil, Plus, RotateCcw, Settings, SlidersHorizontal, Trash2, Type, X } from 'lucide-react'
+import { markdownHeadings, renderMarkdown, renderReader, type MarkdownLinkContext } from '@/lib/markdown-render'
 import { READING_SIZES, readReadingSize, writeReadingSize, type ReadingSize } from '@/lib/reading-preferences'
 import { readTtsVoice } from '@/lib/tts-preferences'
 import { toast } from './toaster'
-import { relativeTime, type CardDetail, type CardGraph, type CardQuizQuestion, type ChatAnswer, type ChatCitation, type RelatedCard } from '@/lib/recall-types'
+import { relativeTime, type CardDetail, type CardGraph, type CardQuizQuestion, type ChatAnswer, type ChatCitation, type RelatedCard, type TagNode } from '@/lib/recall-types'
 import { ChatAttachmentControl, type ChatAttachmentDraft } from './chat-attachments'
 import { apiError, errorMessage, readApiError } from '@/lib/api-client'
+import {
+  CARD_TABS,
+  DEFAULT_PANE_LAYOUT,
+  isTabLocked,
+  parseCardTab,
+  readPaneLayout,
+  selectableTabs,
+  selectPaneTab,
+  writePaneLayout,
+  type CardTab,
+  type PaneLayout,
+  type PaneSide,
+} from '@/lib/pane-layout'
+import { cardMediaSrc, galleryImages, parseCardMedia, type CardMedia } from '@/lib/card-media'
+import { readQuizSettings, writeQuizSettings, DEFAULT_QUIZ_SETTINGS, GENERATE_COUNT_RANGE, TIMER_SECONDS_RANGE, type QuizSettings } from '@/lib/quiz-settings'
+import { reviewOutcomeMessage, submitQuizReviews, type QuizReviewResult } from '@/lib/quiz-review'
+import { readReaderReformat, writeReaderReformat } from '@/lib/reader-reformat-store'
 
-type Tab = 'notebook' | 'reader' | 'chat' | 'quiz' | 'connections' | 'graph'
 type GraphDepth = 1 | 2 | 3
 type GraphFitMode = 'spread' | 'fit'
 type GraphNodeKind = 'related' | 'manual-card' | 'incoming-card' | 'linked-card' | 'entity' | 'context'
 type GraphEdgeKind = 'manual' | 'incoming' | 'linked' | 'entity' | 'related' | 'context'
 type ReaderMode = 'original' | 'reformatted'
-
-const TIMED_QUIZ_SECONDS = 60
 
 type GraphNode = {
   id: string
@@ -53,36 +67,23 @@ type GraphRenderEdge = {
   depth?: number
 }
 
-const TABS: {
-  id: Tab
-  label: string
-  planned?: boolean
-  plannedPhase?: string
-  plannedTitle?: string
-}[] = [
-  { id: 'notebook', label: 'Notebook' },
-  { id: 'reader', label: 'Reader' },
-  {
-    id: 'chat',
-    label: 'Chat',
-    plannedTitle: 'Card chat uses local RAG over the current card and selected Recall context with cited saved-card sources.',
-  },
-  {
-    id: 'quiz',
-    label: 'Quiz',
-    plannedTitle: 'Generate or create short-answer questions, run a local card quiz, and update review scheduling from self-graded answers.',
-  },
-  {
-    id: 'connections',
-    label: 'Connections',
-    plannedTitle: 'Related cards, manual links, generated local entity links, backlinks, return links, and automatic local generation are live.',
-  },
-  {
-    id: 'graph',
-    label: 'Graph',
-    plannedTitle: 'The graph visualizes related cards, multi-hop local connections, generated entity links, filters, fit, and fullscreen controls.',
-  },
-]
+// Two panes wide enough to read side by side start at Tailwind's `lg`; below it
+// the card falls back to the single-pane layout.
+const TWO_PANE_QUERY = '(min-width: 1024px)'
+
+function subscribeToWidth(onChange: () => void) {
+  const query = window.matchMedia(TWO_PANE_QUERY)
+  query.addEventListener('change', onChange)
+  return () => query.removeEventListener('change', onChange)
+}
+
+function useWideViewport(): boolean {
+  return useSyncExternalStore(
+    subscribeToWidth,
+    () => window.matchMedia(TWO_PANE_QUERY).matches,
+    () => false,
+  )
+}
 
 export function CardDetailView({
   id,
@@ -95,7 +96,12 @@ export function CardDetailView({
 }) {
   const router = useRouter()
   const [card, setCard] = useState<CardDetail | null>(null)
-  const [tab, setTab] = useState<Tab>(() => parseInitialTab(initialTab))
+  const [media, setMedia] = useState<CardMedia[]>([])
+  const [galleryOpen, setGalleryOpen] = useState(false)
+  // Server render uses the URL-derived default; the stored layout is merged in
+  // on mount so localStorage never causes a hydration mismatch.
+  const [layout, setLayout] = useState<PaneLayout>(() => initialPaneLayout(initialTab))
+  const wideViewport = useWideViewport()
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [editingNotebook, setEditingNotebook] = useState(false)
@@ -145,6 +151,7 @@ export function CardDetailView({
         return
       }
       setCard(data.card)
+      setMedia(parseCardMedia((data.card as { media?: unknown }).media))
       setTitleDraft(data.card.title)
       if (!editingNotebook) setNotebookDraft(data.card.notebookContent)
       setNotFound(false)
@@ -179,6 +186,11 @@ export function CardDetailView({
   }, [id])
 
   useEffect(() => { setReadingSize(readReadingSize()) }, [])
+  useEffect(() => {
+    const stored = readPaneLayout()
+    const requested = parseCardTab(initialTab)
+    setLayout(requested ? selectPaneTab(stored, 'left', requested) : stored)
+  }, [initialTab])
   useEffect(() => { load() }, [load])
   useEffect(() => {
     setRelatedCards([])
@@ -206,10 +218,15 @@ export function CardDetailView({
     return () => clearInterval(t)
   }, [card, load, processingStalled])
 
+  const visibleTabs = useMemo<CardTab[]>(
+    () => (wideViewport && !layout.rightHidden ? [layout.left, layout.right] : [layout.left]),
+    [layout.left, layout.right, layout.rightHidden, wideViewport],
+  )
+
   useEffect(() => {
     if (!card || relatedLoading || relatedLoadedFor === id) return
-    if (tab === 'connections' || tab === 'graph') loadRelated()
-  }, [card, id, tab, relatedLoading, relatedLoadedFor, loadRelated])
+    if (visibleTabs.includes('connections') || visibleTabs.includes('graph')) loadRelated()
+  }, [card, id, visibleTabs, relatedLoading, relatedLoadedFor, loadRelated])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -410,14 +427,14 @@ export function CardDetailView({
     }
   }
 
-  async function generateQuestions() {
+  async function generateQuestions(count: number) {
     if (generatingQuestions) return
     setGeneratingQuestions(true)
     try {
       const res = await fetch(`/api/cards/${id}/questions/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: 5 }),
+        body: JSON.stringify({ count }),
       })
       const d = await res.json().catch(() => null)
       if (res.ok && isGeneratedQuestionsResponse(d)) {
@@ -531,11 +548,14 @@ export function CardDetailView({
     }
   }
 
-  async function reviewQuestions(results: { questionId: string; correct: boolean }[]): Promise<boolean> {
-    if (questionMutating || results.length === 0) return false
+  // Every answer is attempted, then the caller is told exactly which ones did not
+  // land. There is no batch/undo review route, so a partial result cannot be
+  // rolled back — it can only be reported honestly and retried.
+  async function reviewQuestions(results: QuizReviewResult[]): Promise<QuizReviewResult[]> {
+    if (questionMutating || results.length === 0) return results
     setQuestionMutating(true)
     try {
-      for (const result of results) {
+      const outcome = await submitQuizReviews(results, async result => {
         const res = await fetch(`/api/cards/${id}/questions/${result.questionId}/review`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -543,18 +563,13 @@ export function CardDetailView({
         })
         const d = await res.json().catch(() => null)
         if (!res.ok || !isReviewedQuestionResponse(d)) {
-          toast(apiError(d, res.ok ? 'The local quiz API returned an unexpected review response' : 'Could not record matching answers'))
-          await load()
-          return false
+          return { ok: false, error: apiError(d, res.ok ? 'The local quiz API returned an unexpected review response' : 'Could not record a matching answer') }
         }
-      }
-      const correct = results.filter(result => result.correct).length
-      toast(`Matching quiz recorded: ${correct} of ${results.length} correct`)
+        return { ok: true }
+      })
+      toast(reviewOutcomeMessage(outcome, outcome.recorded.filter(result => result.correct).length))
       await load()
-      return true
-    } catch {
-      toast('Could not record matching answers')
-      return false
+      return outcome.failed
     } finally {
       setQuestionMutating(false)
     }
@@ -661,30 +676,44 @@ export function CardDetailView({
     writeReadingSize(next.id)
   }
 
-  function focusTab(next: Tab) {
-    setTab(next)
-    window.setTimeout(() => document.getElementById(cardTabId(next))?.focus(), 0)
+  const twoPane = wideViewport && !layout.rightHidden
+
+  function applyLayout(next: PaneLayout) {
+    setLayout(next)
+    writePaneLayout(next)
   }
 
-  function onTabKeyDown(e: ReactKeyboardEvent<HTMLButtonElement>, current: Tab) {
-    const currentIndex = TABS.findIndex(item => item.id === current)
-    if (currentIndex < 0) return
+  function chooseTab(pane: PaneSide, next: CardTab) {
+    applyLayout(selectPaneTab(layout, pane, next))
+  }
+
+  function focusTab(pane: PaneSide, next: CardTab) {
+    chooseTab(pane, next)
+    window.setTimeout(() => document.getElementById(cardTabId(pane, next))?.focus(), 0)
+  }
+
+  function onTabKeyDown(e: ReactKeyboardEvent<HTMLButtonElement>, pane: PaneSide, current: CardTab) {
+    // Arrow keys walk only the tabs this pane can actually take, so a tab locked
+    // by the other pane is skipped instead of silently doing nothing.
+    const reachable = selectableTabs(layout, pane, twoPane)
+    const currentIndex = reachable.indexOf(current)
+    if (reachable.length === 0 || currentIndex < 0) return
 
     if (e.key === 'ArrowRight') {
       e.preventDefault()
-      focusTab(TABS[(currentIndex + 1) % TABS.length].id)
+      focusTab(pane, reachable[(currentIndex + 1) % reachable.length])
     }
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
-      focusTab(TABS[(currentIndex - 1 + TABS.length) % TABS.length].id)
+      focusTab(pane, reachable[(currentIndex - 1 + reachable.length) % reachable.length])
     }
     if (e.key === 'Home') {
       e.preventDefault()
-      focusTab(TABS[0].id)
+      focusTab(pane, reachable[0])
     }
     if (e.key === 'End') {
       e.preventDefault()
-      focusTab(TABS[TABS.length - 1].id)
+      focusTab(pane, reachable[reachable.length - 1])
     }
   }
 
@@ -715,9 +744,102 @@ export function CardDetailView({
   const canRetry = !!card.url && card.sourceType !== 'document' && card.sourceType !== 'image' && (card.status === 'failed' || !card.readerContent)
   const currentReadingSize = READING_SIZES.find(size => size.id === readingSize) ?? READING_SIZES[1]
   const readingStyle = { fontSize: `${currentReadingSize.scale}rem` }
+  const images = galleryImages(media)
+  // Timestamps deep-link into the source; saved card links become entity links.
+  const linkContext: MarkdownLinkContext = {
+    sourceUrl: card.url || null,
+    entityCards: card.connections.flatMap(connection => connection.to
+      ? [
+          { label: connection.label, cardId: connection.to.id },
+          { label: cardConnectionTitle(connection.to), cardId: connection.to.id },
+        ]
+      : []),
+  }
+
+  const renderPanel = (pane: PaneSide) => {
+    switch (layout[pane]) {
+      case 'notebook':
+        return (
+          <NotebookPanel
+            cardId={card.id}
+            content={card.notebookContent}
+            linkContext={linkContext}
+            readingStyle={readingStyle}
+            processing={processing}
+            editing={editingNotebook}
+            draft={notebookDraft}
+            regenerating={regenerating}
+            setDraft={setNotebookDraft}
+            onEdit={() => setEditingNotebook(true)}
+            onCancel={() => { setEditingNotebook(false); setNotebookDraft(card.notebookContent) }}
+            onSave={() => { setEditingNotebook(false); patch({ notebookContent: notebookDraft }, 'Notebook saved') }}
+            onCopy={() => copyToClipboard(card.notebookContent, 'Notebook copied', 'Could not copy Notebook')}
+            onRegenerate={regenerate}
+          />
+        )
+      case 'reader':
+        return (
+          <ReaderPanel
+            cardId={card.id}
+            sourceType={card.sourceType}
+            content={card.readerContent}
+            storedReformat={card.readerReformatted ?? ''}
+            linkContext={linkContext}
+            readingStyle={readingStyle}
+            canRetry={canRetry}
+            retrying={retrying}
+            onRetry={retry}
+          />
+        )
+      case 'chat':
+        return <CardChatPanel card={card} />
+      case 'quiz':
+        return (
+          <QuizPanel
+            card={card}
+            autoStart={initialQuizStart}
+            generatingQuestions={generatingQuestions}
+            questionMutating={questionMutating}
+            onGenerateQuestions={generateQuestions}
+            onCreateManualQuestion={createManualQuestion}
+            onUpdateQuestion={updateQuestion}
+            onDeleteQuestion={deleteQuestion}
+            onReviewQuestion={reviewQuestion}
+            onReviewQuestions={reviewQuestions}
+          />
+        )
+      case 'connections':
+        return (
+          <ConnectionsPanel
+            card={card}
+            relatedCards={relatedCards}
+            relatedLoading={relatedLoading}
+            relatedError={relatedError}
+            manualLinkDraft={manualLinkDraft}
+            connectionMutating={connectionMutating}
+            setManualLinkDraft={setManualLinkDraft}
+            onCreateManualConnection={createManualConnection}
+            onRemoveConnection={removeConnection}
+            onGenerateConnections={generateConnections}
+            onRetryRelated={loadRelated}
+            generatingConnections={generatingConnections}
+          />
+        )
+      case 'graph':
+        return (
+          <GraphPanel
+            card={card}
+            relatedCards={relatedCards}
+            relatedLoading={relatedLoading}
+            relatedError={relatedError}
+            onRetryRelated={loadRelated}
+          />
+        )
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 md:px-10 pb-24">
+    <div className={`mx-auto px-6 md:px-10 pb-24 ${twoPane ? 'max-w-3xl lg:max-w-7xl' : 'max-w-3xl'}`}>
       {/* top bar */}
       <div className="flex items-center justify-between pt-8 pb-4">
         <Link href="/items" className="rr-mono rr-link">← Library</Link>
@@ -787,7 +909,20 @@ export function CardDetailView({
               >
                 {exportingMarkdown ? 'Exporting…' : 'Export to Markdown'}
               </button>
-              <button disabled className="block w-full text-left px-4 py-2 rr-prose" role="menuitem" aria-disabled="true" aria-label="Open card image gallery (planned)" title="Card image galleries are planned after richer media capture and export behavior exist." style={{ fontSize: '0.9rem', color: 'var(--sepia-2)', cursor: 'not-allowed' }}>Images ·</button>
+              {images.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setGalleryOpen(true); setMenuOpen(false) }}
+                  className="block w-full text-left px-4 py-2 rr-prose"
+                  role="menuitem"
+                  data-card-menu-item
+                  aria-label={`Open card image gallery (${images.length})`}
+                  title="Show every image saved with this card."
+                  style={{ fontSize: '0.9rem' }}
+                >
+                  Images · {images.length}
+                </button>
+              )}
               <button onClick={copyCardLink} className="block w-full text-left px-4 py-2 rr-prose" role="menuitem" data-card-menu-item style={{ fontSize: '0.9rem' }}>Copy local link</button>
               {card.shared ? (
                 <>
@@ -918,109 +1053,180 @@ export function CardDetailView({
         )}
       </div>
 
-      {/* tabs */}
-      <div className="mt-7 flex gap-5 rr-rule pb-0 overflow-x-auto" role="tablist" aria-label="Card sections">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            id={cardTabId(t.id)}
-            type="button"
-            role="tab"
-            onClick={() => setTab(t.id)}
-            onKeyDown={e => onTabKeyDown(e, t.id)}
-            className="rr-mono pb-2 shrink-0"
-            aria-selected={tab === t.id}
-            aria-controls={cardPanelId(t.id)}
-            aria-label={t.planned ? `${t.label} tab (${t.plannedPhase} planned)` : undefined}
-            tabIndex={tab === t.id ? 0 : -1}
-            style={{
-              color: tab === t.id ? 'var(--accent)' : t.planned ? 'var(--sepia-2)' : 'var(--sepia)',
-              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              opacity: t.planned && tab !== t.id ? 0.72 : 1,
-              cursor: 'pointer',
-            }}
-            title={t.plannedTitle}
-          >
-            {t.label}{t.planned && ' ·'}
-          </button>
-        ))}
+      {/* panes — two side by side from lg up, a single pane below it */}
+      <div className={`mt-7 ${twoPane ? 'flex flex-col gap-8 lg:flex-row lg:items-start' : ''}`}>
+        <section className="min-w-0 flex-1">
+          <PaneTabs
+            pane="left"
+            layout={layout}
+            twoPane={twoPane}
+            onSelect={chooseTab}
+            onKeyDown={onTabKeyDown}
+            trailing={wideViewport && layout.rightHidden ? (
+              <button
+                type="button"
+                className="rr-mono rr-btn-plain ml-auto shrink-0"
+                onClick={() => applyLayout({ ...layout, rightHidden: false })}
+                aria-label="Show the AI panel"
+                title="Show the second pane."
+              >
+                <PanelRight size={13} aria-hidden="true" />
+                Show panel
+              </button>
+            ) : null}
+          />
+          <div id={cardPanelId('left', layout.left)} role="tabpanel" aria-labelledby={cardTabId('left', layout.left)} className="pt-6">
+            {renderPanel('left')}
+          </div>
+        </section>
+
+        {twoPane && (
+          <section className="min-w-0 flex-1 lg:pl-8" style={{ borderLeft: '1px solid var(--hairline)' }}>
+            <PaneTabs
+              pane="right"
+              layout={layout}
+              twoPane={twoPane}
+              onSelect={chooseTab}
+              onKeyDown={onTabKeyDown}
+              trailing={(
+                <button
+                  type="button"
+                  className="rr-mono rr-btn-plain ml-auto shrink-0"
+                  onClick={() => applyLayout({ ...layout, rightHidden: true })}
+                  aria-label="Hide the AI panel"
+                  title="Close the second pane and read in a single column."
+                >
+                  <X size={13} aria-hidden="true" />
+                  Hide
+                </button>
+              )}
+            />
+            <div id={cardPanelId('right', layout.right)} role="tabpanel" aria-labelledby={cardTabId('right', layout.right)} className="pt-6">
+              {renderPanel('right')}
+            </div>
+          </section>
+        )}
       </div>
 
-      {/* panels */}
-      <div id={cardPanelId(tab)} role="tabpanel" aria-labelledby={cardTabId(tab)} className="pt-6">
-        {tab === 'notebook' && (
-          <NotebookPanel
-            cardId={card.id}
-            content={card.notebookContent}
-            readingStyle={readingStyle}
-            processing={processing}
-            editing={editingNotebook}
-            draft={notebookDraft}
-            regenerating={regenerating}
-            setDraft={setNotebookDraft}
-            onEdit={() => setEditingNotebook(true)}
-            onCancel={() => { setEditingNotebook(false); setNotebookDraft(card.notebookContent) }}
-            onSave={() => { setEditingNotebook(false); patch({ notebookContent: notebookDraft }, 'Notebook saved') }}
-            onCopy={() => copyToClipboard(card.notebookContent, 'Notebook copied', 'Could not copy Notebook')}
-            onRegenerate={regenerate}
-          />
-        )}
-        {tab === 'reader' && <ReaderPanel cardId={card.id} sourceType={card.sourceType} content={card.readerContent} readingStyle={readingStyle} canRetry={canRetry} retrying={retrying} onRetry={retry} />}
-        {tab === 'chat' && <CardChatPanel card={card} />}
-        {tab === 'quiz' && (
-          <QuizPanel
-            card={card}
-            autoStart={initialQuizStart}
-            generatingQuestions={generatingQuestions}
-            questionMutating={questionMutating}
-            onGenerateQuestions={generateQuestions}
-            onCreateManualQuestion={createManualQuestion}
-            onUpdateQuestion={updateQuestion}
-            onDeleteQuestion={deleteQuestion}
-            onReviewQuestion={reviewQuestion}
-            onReviewQuestions={reviewQuestions}
-          />
-        )}
-        {tab === 'connections' && (
-          <ConnectionsPanel
-            card={card}
-            relatedCards={relatedCards}
-            relatedLoading={relatedLoading}
-            relatedError={relatedError}
-            manualLinkDraft={manualLinkDraft}
-            connectionMutating={connectionMutating}
-            setManualLinkDraft={setManualLinkDraft}
-            onCreateManualConnection={createManualConnection}
-            onRemoveConnection={removeConnection}
-            onGenerateConnections={generateConnections}
-            onRetryRelated={loadRelated}
-            generatingConnections={generatingConnections}
-          />
-        )}
-        {tab === 'graph' && (
-          <GraphPanel
-            card={card}
-            relatedCards={relatedCards}
-            relatedLoading={relatedLoading}
-            relatedError={relatedError}
-            onRetryRelated={loadRelated}
-          />
-        )}
+      {galleryOpen && <ImageGallery images={images} title={card.title} onClose={() => setGalleryOpen(false)} />}
+    </div>
+  )
+}
+
+function PaneTabs({
+  pane,
+  layout,
+  twoPane,
+  onSelect,
+  onKeyDown,
+  trailing,
+}: {
+  pane: PaneSide
+  layout: PaneLayout
+  twoPane: boolean
+  onSelect: (pane: PaneSide, tab: CardTab) => void
+  onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>, pane: PaneSide, tab: CardTab) => void
+  trailing?: React.ReactNode
+}) {
+  const active = layout[pane]
+  return (
+    <div className="flex items-center gap-5 rr-rule pb-0 overflow-x-auto" role="tablist" aria-label={pane === 'left' ? 'Card sections' : 'Second pane sections'}>
+      {CARD_TABS.map(t => {
+        const locked = isTabLocked(layout, pane, t.id, twoPane)
+        const selected = active === t.id
+        return (
+          <button
+            key={t.id}
+            id={cardTabId(pane, t.id)}
+            type="button"
+            role="tab"
+            disabled={locked}
+            onClick={() => onSelect(pane, t.id)}
+            onKeyDown={e => onKeyDown(e, pane, t.id)}
+            className="rr-mono pb-2 shrink-0"
+            aria-selected={selected}
+            aria-controls={selected ? cardPanelId(pane, t.id) : undefined}
+            aria-label={locked ? `${t.label} (open in the other pane)` : undefined}
+            tabIndex={selected ? 0 : -1}
+            style={{
+              color: selected ? 'var(--accent)' : locked ? 'var(--sepia-2)' : 'var(--sepia)',
+              borderBottom: selected ? '2px solid var(--accent)' : '2px solid transparent',
+              opacity: locked ? 0.45 : 1,
+              cursor: locked ? 'not-allowed' : 'pointer',
+            }}
+            title={locked ? `${t.label} is already open in the other pane.` : t.title}
+          >
+            {t.label}
+          </button>
+        )
+      })}
+      {trailing}
+    </div>
+  )
+}
+
+function ImageGallery({
+  images,
+  title,
+  onClose,
+}: {
+  images: CardMedia[]
+  title: string
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.6)] p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Images saved with ${title}`}
+    >
+      <div className="rr-card flex max-h-[92vh] w-full max-w-5xl flex-col gap-4 overflow-auto p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="rr-mono" style={{ color: 'var(--accent)' }}>Images · {images.length}</p>
+            <h3 className="font-display mt-1" style={{ fontSize: '1.2rem', fontWeight: 500, overflowWrap: 'anywhere' }}>{title}</h3>
+          </div>
+          <button className="rr-btn rr-btn-icon" type="button" onClick={onClose} aria-label="Close image gallery">
+            <X size={14} aria-hidden="true" />
+            <span>Close</span>
+          </button>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {images.map(item => {
+            const src = cardMediaSrc(item)
+            if (!src) return null
+            return (
+              <a key={item.id} href={src} target="_blank" rel="noreferrer" className="rr-card block overflow-hidden" aria-label="Open full image">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt="" loading="lazy" className="h-48 w-full object-contain" style={{ background: 'var(--paper)' }} />
+              </a>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
 }
 
-function cardTabId(tab: Tab): string {
-  return `card-detail-tab-${tab}`
+function cardTabId(pane: PaneSide, tab: CardTab): string {
+  return `card-detail-${pane}-tab-${tab}`
 }
 
-function cardPanelId(tab: Tab): string {
-  return `card-detail-panel-${tab}`
+function cardPanelId(pane: PaneSide, tab: CardTab): string {
+  return `card-detail-${pane}-panel-${tab}`
 }
 
-function parseInitialTab(value: string | undefined): Tab {
-  return TABS.some(tab => tab.id === value) ? value as Tab : 'notebook'
+/** SSR-safe starting layout: URL only, no localStorage (that merges in on mount). */
+function initialPaneLayout(initialTab: string | undefined): PaneLayout {
+  const requested = parseCardTab(initialTab)
+  return requested ? selectPaneTab(DEFAULT_PANE_LAYOUT, 'left', requested) : DEFAULT_PANE_LAYOUT
 }
 
 function menuItems(root: HTMLDivElement | null): HTMLElement[] {
@@ -1144,7 +1350,7 @@ function isChatAnswerResponse(data: unknown): data is { ok: true } & ChatAnswer 
 
 
 function NotebookPanel(props: {
-  cardId: string; content: string; readingStyle: CSSProperties; processing: boolean; editing: boolean; draft: string; regenerating: boolean
+  cardId: string; content: string; linkContext: MarkdownLinkContext; readingStyle: CSSProperties; processing: boolean; editing: boolean; draft: string; regenerating: boolean
   setDraft: (s: string) => void; onEdit: () => void; onCancel: () => void; onSave: () => void
   onCopy: () => void; onRegenerate: () => void
 }) {
@@ -1189,7 +1395,7 @@ function NotebookPanel(props: {
         <button className="rr-mono rr-link" onClick={props.onRegenerate} disabled={props.regenerating}>{props.regenerating ? 'regenerating…' : '↻ regenerate'}</button>
       </div>
       <NotebookContents content={props.content} />
-      <div className="rr-prose" style={props.readingStyle} dangerouslySetInnerHTML={{ __html: renderMarkdown(props.content) }} />
+      <div className="rr-prose" style={props.readingStyle} dangerouslySetInnerHTML={{ __html: renderMarkdown(props.content, props.linkContext) }} />
     </div>
   )
 }
@@ -1277,6 +1483,8 @@ function ReaderPanel({
   cardId,
   sourceType,
   content,
+  storedReformat,
+  linkContext,
   readingStyle,
   canRetry,
   retrying,
@@ -1285,6 +1493,8 @@ function ReaderPanel({
   cardId: string
   sourceType: string
   content: string
+  storedReformat: string
+  linkContext: MarkdownLinkContext
   readingStyle: CSSProperties
   canRetry: boolean
   retrying: boolean
@@ -1294,6 +1504,17 @@ function ReaderPanel({
   const [reformatError, setReformatError] = useState<string | null>(null)
   const [reformatted, setReformatted] = useState<string | null>(null)
   const [readerMode, setReaderMode] = useState<ReaderMode>('original')
+
+  // A reformat costs an LLM round trip, so it is restored on mount instead of
+  // being thrown away by a tab switch or a reload. The server copy wins: it
+  // follows the user across browsers and is not subject to the local cache's
+  // newest-5 eviction. The localStorage entry is only a fallback, which still
+  // matters for reformats made before the column existed.
+  useEffect(() => {
+    const stored = storedReformat.trim() || readReaderReformat(cardId)
+    setReformatted(stored || null)
+    setReaderMode(stored ? 'reformatted' : 'original')
+  }, [cardId, storedReformat])
 
   function focusReaderMode(next: ReaderMode) {
     setReaderMode(next)
@@ -1332,6 +1553,7 @@ function ReaderPanel({
       if (!res.ok) throw new Error(apiError(data, 'Could not reformat Reader text'))
       if (!isReaderReformatResponse(data)) throw new Error('The Reader reformat API returned an unexpected response')
       setReformatted(data.reformatted)
+      writeReaderReformat(cardId, data.reformatted)
       setReaderMode('reformatted')
       if (data.truncated) {
         setReformatError('Reader reformat used the first local processing window; the original text is still available.')
@@ -1419,7 +1641,7 @@ function ReaderPanel({
           aria-label="Reformatted Reader text"
           className="rr-prose"
           style={readingStyle}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(reformatted) }}
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(reformatted, linkContext) }}
         />
       ) : (
         <div
@@ -1429,7 +1651,7 @@ function ReaderPanel({
           aria-label="Original Reader text"
           className="rr-prose rr-dropcap"
           style={readingStyle}
-          dangerouslySetInnerHTML={{ __html: renderReader(content) }}
+          dangerouslySetInnerHTML={{ __html: renderReader(content, linkContext) }}
         />
       )}
     </div>
@@ -1462,7 +1684,11 @@ function CardChatPanel({ card }: { card: CardDetail }) {
   const [chatError, setChatError] = useState<string | null>(null)
   const [includeSemantic, setIncludeSemantic] = useState(true)
   const [attachments, setAttachments] = useState<ChatAttachmentDraft[]>([])
+  const [contextOpen, setContextOpen] = useState(false)
+  const [extraCards, setExtraCards] = useState<{ id: string; title: string }[]>([])
+  const [tagSlugs, setTagSlugs] = useState<string[]>([])
   const canSend = prompt.trim().length > 0 && !sending
+  const contextCount = extraCards.length + tagSlugs.length
 
   async function sendChat(nextPrompt = prompt) {
     const trimmed = nextPrompt.trim()
@@ -1483,7 +1709,8 @@ function CardChatPanel({ card }: { card: CardDetail }) {
         body: JSON.stringify({
           prompt: trimmed,
           scope: 'card',
-          cardIds: [card.id],
+          cardIds: [card.id, ...extraCards.map(item => item.id)],
+          tagSlugs,
           threadId,
           includeSemantic,
           attachments,
@@ -1530,12 +1757,41 @@ function CardChatPanel({ card }: { card: CardDetail }) {
             />
             Semantic library context
           </label>
+          {extraCards.map(item => (
+            <span key={item.id} className="rr-tag inline-flex items-center gap-1.5" style={{ borderColor: 'var(--accent)' }}>
+              {shortQuestionLabel(item.title)}
+              <button type="button" onClick={() => setExtraCards(current => current.filter(entry => entry.id !== item.id))} aria-label={`Remove ${item.title} from chat context`} className="inline-flex opacity-60 hover:opacity-100">
+                <X size={12} aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+          {tagSlugs.map(slug => (
+            <span key={slug} className="rr-tag inline-flex items-center gap-1.5" style={{ borderColor: 'var(--gold)' }}>
+              #{slug}
+              <button type="button" onClick={() => setTagSlugs(current => current.filter(entry => entry !== slug))} aria-label={`Remove tag ${slug} from chat context`} className="inline-flex opacity-60 hover:opacity-100">
+                <X size={12} aria-hidden="true" />
+              </button>
+            </span>
+          ))}
           <span className="rr-prose" style={{ fontSize: '0.92rem', overflowWrap: 'anywhere' }}>{card.title}</span>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <button className="rr-btn" onClick={() => void sendChat('Give me a concise summary of this card with citations.')} disabled={sending} type="button">Concise summary</button>
           <button className="rr-btn" onClick={() => void sendChat('Give me a detailed summary of this card, including key claims and caveats, with citations.')} disabled={sending} type="button">Detailed summary</button>
         </div>
+        {contextOpen && (
+          <ChatContextPicker
+            excludeCardId={card.id}
+            selectedCardIds={extraCards.map(item => item.id)}
+            selectedTagSlugs={tagSlugs}
+            onToggleCard={item => setExtraCards(current => current.some(entry => entry.id === item.id)
+              ? current.filter(entry => entry.id !== item.id)
+              : [...current, item])}
+            onToggleTag={slug => setTagSlugs(current => current.includes(slug)
+              ? current.filter(entry => entry !== slug)
+              : [...current, slug])}
+          />
+        )}
       </div>
       {messages.length > 0 && (
         <div className="space-y-4" aria-live="polite">
@@ -1595,7 +1851,18 @@ function CardChatPanel({ card }: { card: CardDetail }) {
       </form>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
-          <button className="rr-btn rr-btn-icon" disabled aria-label="Choose additional card chat context (planned)" title="Custom tag/card context picking is planned after the shared chat context picker is writable from the composer."><AtSign size={14} aria-hidden="true" /><span>Context</span></button>
+          <button
+            className="rr-btn rr-btn-icon"
+            type="button"
+            aria-expanded={contextOpen}
+            aria-controls="card-chat-context-picker"
+            aria-label="Choose additional card chat context"
+            title="Add other saved cards or tags to this chat's context."
+            onClick={() => setContextOpen(open => !open)}
+          >
+            <AtSign size={14} aria-hidden="true" />
+            <span>{contextCount > 0 ? `Context · ${contextCount}` : 'Context'}</span>
+          </button>
           <ChatAttachmentControl
             attachments={attachments}
             disabled={sending}
@@ -1608,10 +1875,130 @@ function CardChatPanel({ card }: { card: CardDetail }) {
         <button className="rr-btn rr-btn-accent rr-btn-icon" disabled={!canSend} onClick={() => void sendChat()} type="button" aria-label="Send card chat prompt" title="Ask the local model using this card and selected semantic Recall context."><MessageCircle size={14} aria-hidden="true" /><span>{sending ? 'Answering…' : 'Send'}</span></button>
       </div>
       <p className="rr-prose" style={{ fontSize: '0.9rem' }}>
-        Answers use local Recall context and cite saved cards. Uploaded text, Markdown, CSV, JSON, code files, extractable PDFs, and PNG/JPG/WebP images are temporary context for this browser session; custom context picking and chat history browsing are still planned here.
+        Answers use local Recall context and cite saved cards. Uploaded text, Markdown, CSV, JSON, code files, extractable PDFs, and PNG/JPG/WebP images are temporary context for this browser session; chat history browsing is still planned here.
       </p>
     </div>
   )
+}
+
+/** Adds other saved cards and tags to the chat's context — both are already accepted by POST /api/chat. */
+function ChatContextPicker({
+  excludeCardId,
+  selectedCardIds,
+  selectedTagSlugs,
+  onToggleCard,
+  onToggleTag,
+}: {
+  excludeCardId: string
+  selectedCardIds: string[]
+  selectedTagSlugs: string[]
+  onToggleCard: (card: { id: string; title: string }) => void
+  onToggleTag: (slug: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<{ id: string; title: string }[]>([])
+  const [tags, setTags] = useState<{ slug: string; name: string }[]>([])
+  const [searching, setSearching] = useState(false)
+  const [pickerError, setPickerError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/tags')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (cancelled) return
+        const tree = data && typeof data === 'object' ? (data as { tags?: unknown }).tags : null
+        setTags(Array.isArray(tree) ? flattenTagNodes(tree as TagNode[]) : [])
+      })
+      .catch(() => { if (!cancelled) setTags([]) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Debounced so typing does not fire a search per keystroke.
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (!trimmed) { setResults([]); setPickerError(null); return }
+    let cancelled = false
+    setSearching(true)
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/cards?query=${encodeURIComponent(trimmed)}`)
+        if (!res.ok) throw new Error(await readApiError(res, 'Could not search cards'))
+        const data = await res.json().catch(() => null)
+        const cards = data && typeof data === 'object' ? (data as { cards?: unknown }).cards : null
+        if (cancelled) return
+        setPickerError(null)
+        setResults(Array.isArray(cards)
+          ? (cards as { id?: unknown; title?: unknown }[])
+              .filter(item => typeof item.id === 'string' && item.id !== excludeCardId)
+              .slice(0, 8)
+              .map(item => ({ id: String(item.id), title: typeof item.title === 'string' ? item.title : 'Untitled' }))
+          : [])
+      } catch (err) {
+        if (!cancelled) { setResults([]); setPickerError(errorMessage(err, 'Could not search cards')) }
+      } finally {
+        if (!cancelled) setSearching(false)
+      }
+    }, 250)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [query, excludeCardId])
+
+  return (
+    <div id="card-chat-context-picker" className="mt-4 rr-rule pt-4">
+      <label className="block">
+        <span className="rr-mono">Add a saved card</span>
+        <input
+          value={query}
+          onChange={event => setQuery(event.currentTarget.value)}
+          placeholder="Search your library"
+          aria-label="Search cards to add to chat context"
+          className="mt-2 w-full bg-transparent outline-none rr-prose"
+          style={{ border: '1px solid var(--hairline)', borderRadius: 6, padding: '0.5rem 0.6rem' }}
+        />
+      </label>
+      {searching && <p className="rr-mono mt-2">searching…</p>}
+      {pickerError && <p className="rr-prose mt-2" style={{ fontSize: '0.9rem' }}>{pickerError}</p>}
+      {results.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {results.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              className="rr-tag"
+              onClick={() => onToggleCard(item)}
+              style={selectedCardIds.includes(item.id) ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
+            >
+              {selectedCardIds.includes(item.id) ? '✓ ' : '+ '}{shortQuestionLabel(item.title)}
+            </button>
+          ))}
+        </div>
+      )}
+      {tags.length > 0 && (
+        <div className="mt-4">
+          <span className="rr-mono">Add a tag</span>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {tags.slice(0, 24).map(tag => (
+              <button
+                key={tag.slug}
+                type="button"
+                className="rr-tag"
+                onClick={() => onToggleTag(tag.slug)}
+                style={selectedTagSlugs.includes(tag.slug) ? { borderColor: 'var(--gold)', color: 'var(--gold)' } : undefined}
+              >
+                {selectedTagSlugs.includes(tag.slug) ? '✓ ' : '+ '}{tag.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function flattenTagNodes(nodes: TagNode[]): { slug: string; name: string }[] {
+  return nodes.flatMap(node => node && typeof node.slug === 'string'
+    ? [{ slug: node.slug, name: typeof node.name === 'string' ? node.name : node.slug }, ...flattenTagNodes(Array.isArray(node.children) ? node.children : [])]
+    : [])
 }
 
 function QuizPanel({
@@ -1630,13 +2017,17 @@ function QuizPanel({
   autoStart: boolean
   generatingQuestions: boolean
   questionMutating: boolean
-  onGenerateQuestions: () => void
+  onGenerateQuestions: (count: number) => void
   onCreateManualQuestion: (input: { prompt: string; answer: string }) => Promise<boolean>
   onUpdateQuestion: (questionId: string, input: { prompt: string; answer: string }) => Promise<boolean>
   onDeleteQuestion: (questionId: string) => Promise<boolean>
   onReviewQuestion: (questionId: string, correct: boolean) => Promise<boolean>
-  onReviewQuestions: (results: { questionId: string; correct: boolean }[]) => Promise<boolean>
+  /** Resolves with the answers that did NOT get recorded. */
+  onReviewQuestions: (results: QuizReviewResult[]) => Promise<QuizReviewResult[]>
 }) {
+  const [settings, setSettings] = useState<QuizSettings>(() => DEFAULT_QUIZ_SETTINGS)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [unrecorded, setUnrecorded] = useState<QuizReviewResult[]>([])
   const [creatingCustom, setCreatingCustom] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
   const [customAnswer, setCustomAnswer] = useState('')
@@ -1649,7 +2040,7 @@ function QuizPanel({
   const [userAnswer, setUserAnswer] = useState('')
   const [selectedOption, setSelectedOption] = useState('')
   const [timedMode, setTimedMode] = useState(false)
-  const [secondsLeft, setSecondsLeft] = useState(TIMED_QUIZ_SECONDS)
+  const [secondsLeft, setSecondsLeft] = useState(DEFAULT_QUIZ_SETTINGS.timerSeconds)
   const [timedOutQuestionId, setTimedOutQuestionId] = useState<string | null>(null)
   const [matchingActive, setMatchingActive] = useState(false)
   const [matchingAnswers, setMatchingAnswers] = useState<CardQuizQuestion[]>([])
@@ -1664,6 +2055,16 @@ function QuizPanel({
   const canSubmitMatching = matchingActive && quizQuestions.every(question => matchingSelections[question.id]) && !questionMutating && !matchingScore
   const canSaveCustom = customPrompt.trim().length > 0 && customAnswer.trim().length > 0 && !questionMutating
   const canSaveEdit = editPrompt.trim().length > 0 && editAnswer.trim().length > 0 && !questionMutating
+
+  useEffect(() => { setSettings(readQuizSettings()) }, [])
+
+  function updateSettings(patch: Partial<QuizSettings>) {
+    setSettings(current => {
+      const next = { ...current, ...patch }
+      writeQuizSettings(next)
+      return next
+    })
+  }
 
   async function submitCustomQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -1724,7 +2125,7 @@ function QuizPanel({
     setMatchingScore(null)
     setSessionActive(true)
     setTimedMode(timed)
-    setSecondsLeft(TIMED_QUIZ_SECONDS)
+    setSecondsLeft(settings.timerSeconds)
     setTimedOutQuestionId(null)
     setCurrentIndex(0)
     setAnswerRevealed(false)
@@ -1748,17 +2149,22 @@ function QuizPanel({
     setMatchingAnswers([])
     setMatchingSelections({})
     setMatchingScore(null)
+    setUnrecorded([])
   }
 
-  async function submitMatchingQuiz() {
-    if (!canSubmitMatching) return
-    const results = quizQuestions.map(question => ({
+  async function submitMatchingQuiz(only?: QuizReviewResult[]) {
+    const results = only ?? quizQuestions.map(question => ({
       questionId: question.id,
       correct: matchingSelections[question.id] === question.id,
     }))
-    const recorded = await onReviewQuestions(results)
-    if (!recorded) return
-    setMatchingScore({ correct: results.filter(result => result.correct).length, total: results.length })
+    if (results.length === 0) return
+    const failed = await onReviewQuestions(results)
+    setUnrecorded(failed)
+    // Only claim a score once every answer actually landed; a partial batch stays
+    // open so the unrecorded answers can be retried.
+    if (failed.length > 0) return
+    const scored = quizQuestions.map(question => matchingSelections[question.id] === question.id)
+    setMatchingScore({ correct: scored.filter(Boolean).length, total: scored.length })
   }
 
   const recordAnswer = useCallback(async (correct: boolean) => {
@@ -1775,12 +2181,12 @@ function QuizPanel({
       return
     }
     setCurrentIndex(index => index + 1)
-    setSecondsLeft(TIMED_QUIZ_SECONDS)
+    setSecondsLeft(settings.timerSeconds)
     setTimedOutQuestionId(null)
     setAnswerRevealed(false)
     setUserAnswer('')
     setSelectedOption('')
-  }, [activeIndex, currentQuestion, onReviewQuestion, quizQuestions.length])
+  }, [activeIndex, currentQuestion, onReviewQuestion, quizQuestions.length, settings.timerSeconds])
 
   useEffect(() => {
     if (!sessionActive || !timedMode || !currentQuestion || answerRevealed || questionMutating) return
@@ -1807,9 +2213,53 @@ function QuizPanel({
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/spaced-repetition" className="rr-btn">Learn more</Link>
-          <button className="rr-btn rr-btn-icon" disabled aria-label="Open quiz settings for this card (planned)" title="Card quiz settings are planned with the review engine."><Settings size={14} aria-hidden="true" /><span>Settings</span></button>
+          <button
+            className="rr-btn rr-btn-icon"
+            type="button"
+            aria-expanded={settingsOpen}
+            aria-controls="card-quiz-settings"
+            aria-label="Open quiz settings for this card"
+            title="Set the timed-quiz clock and how many questions to generate."
+            onClick={() => setSettingsOpen(open => !open)}
+          >
+            <Settings size={14} aria-hidden="true" />
+            <span>Settings</span>
+          </button>
         </div>
       </div>
+      {settingsOpen && (
+        <section id="card-quiz-settings" className="rr-card grid gap-4 p-4 sm:grid-cols-2" aria-label="Quiz settings">
+          <label className="block">
+            <span className="rr-mono">Timed quiz seconds per question</span>
+            <input
+              type="number"
+              min={TIMER_SECONDS_RANGE.min}
+              max={TIMER_SECONDS_RANGE.max}
+              value={settings.timerSeconds}
+              onChange={event => updateSettings({ timerSeconds: Number(event.currentTarget.value) })}
+              aria-label="Timed quiz seconds per question"
+              className="mt-2 w-full bg-transparent outline-none rr-prose"
+              style={{ border: '1px solid var(--hairline)', borderRadius: 6, padding: '0.5rem 0.6rem' }}
+            />
+          </label>
+          <label className="block">
+            <span className="rr-mono">Questions per generate</span>
+            <input
+              type="number"
+              min={GENERATE_COUNT_RANGE.min}
+              max={GENERATE_COUNT_RANGE.max}
+              value={settings.generateCount}
+              onChange={event => updateSettings({ generateCount: Number(event.currentTarget.value) })}
+              aria-label="Questions per generate"
+              className="mt-2 w-full bg-transparent outline-none rr-prose"
+              style={{ border: '1px solid var(--hairline)', borderRadius: 6, padding: '0.5rem 0.6rem' }}
+            />
+          </label>
+          <p className="rr-prose sm:col-span-2" style={{ fontSize: '0.9rem' }}>
+            Saved in this browser. Timer applies to the next timed quiz; the count applies to the next generate.
+          </p>
+        </section>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <button
           className="rr-card p-4 text-left"
@@ -1817,10 +2267,10 @@ function QuizPanel({
           aria-label="Generate quiz questions for this card"
           title="Generate local active-recall questions from this card's Notebook and Reader content."
           style={{ borderRadius: 6, cursor: generatingQuestions ? 'wait' : 'pointer' }}
-          onClick={onGenerateQuestions}
+          onClick={() => onGenerateQuestions(settings.generateCount)}
           type="button"
         >
-          <span className="rr-mono" style={{ color: 'var(--accent)' }}>{generatingQuestions ? 'Generating…' : 'Generate Questions'}</span>
+          <span className="rr-mono" style={{ color: 'var(--accent)' }}>{generatingQuestions ? 'Generating…' : `Generate ${settings.generateCount} Questions`}</span>
           <span className="rr-prose mt-2 block" style={{ fontSize: '0.92rem' }}>Create short-answer and multiple-choice questions from this card&apos;s Notebook and Reader content.</span>
         </button>
         <button
@@ -1985,6 +2435,21 @@ function QuizPanel({
               )
             })}
           </div>
+          {unrecorded.length > 0 && (
+            <div className="rr-card p-3" role="status">
+              <p className="rr-prose" style={{ fontSize: '0.94rem', color: 'var(--warning)' }}>
+                {unrecorded.length} {unrecorded.length === 1 ? 'answer' : 'answers'} did not save, so no score was recorded for this round.
+              </p>
+              <button
+                className="rr-btn mt-3"
+                type="button"
+                disabled={questionMutating}
+                onClick={() => void submitMatchingQuiz(unrecorded)}
+              >
+                {questionMutating ? 'Retrying…' : `Retry ${unrecorded.length} unsaved`}
+              </button>
+            </div>
+          )}
           <button className="rr-btn rr-btn-accent rr-btn-icon" type="button" disabled={!canSubmitMatching} onClick={() => void submitMatchingQuiz()}>
             <Check size={14} aria-hidden="true" />
             <span>{questionMutating ? 'Submitting…' : matchingScore ? 'Review submitted' : 'Submit matches'}</span>

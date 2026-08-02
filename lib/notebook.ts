@@ -8,6 +8,34 @@ export interface NotebookInput {
 }
 
 /**
+ * How much notebook to generate, and in what language. Comes from the user's
+ * content preferences (lib/app-preferences.ts). Omitted means concise English,
+ * which is what every existing caller got before these were configurable.
+ */
+export interface NotebookStyle {
+  depth?: 'concise' | 'detailed'
+  language?: string
+}
+
+// 'off' never reaches here: the pipeline drops the summarization stage entirely
+// rather than calling this with nothing to do.
+function styleDirectives(style: NotebookStyle | undefined): { bullets: string; extra: string; maxTokens: number } {
+  const detailed = style?.depth === 'detailed'
+  const language = style?.language?.trim()
+  const languageRule =
+    language && language.toLowerCase() !== 'english'
+      ? ` Write the entire notebook in ${language}, including the section headings.`
+      : ''
+  return {
+    bullets: detailed ? '8 to 14' : '4 to 8',
+    extra: detailed
+      ? ' Include a "## Details" section with sub-headings covering each major theme in the source.' + languageRule
+      : languageRule,
+    maxTokens: detailed ? 2400 : 1200,
+  }
+}
+
+/**
  * Generates a card's "Notebook" — a structured, editable markdown summary
  * (Recall's signature view). Distinct from the 1-line `summary` preview.
  *
@@ -15,11 +43,12 @@ export interface NotebookInput {
  * when the source is long enough, themed sub-sections. The result is stored in
  * `Bookmark.notebookContent` and is user-editable; regeneration is explicit.
  */
-export async function generateNotebook(input: NotebookInput): Promise<string> {
+export async function generateNotebook(input: NotebookInput, style?: NotebookStyle): Promise<string> {
   const content = input.body?.trim() || input.text?.trim()
   if (!content) return ''
 
   const title = input.title?.trim() || input.text?.slice(0, 120) || 'Untitled'
+  const { bullets, extra, maxTokens } = styleDirectives(style)
 
   const md = await llmChat(
     [
@@ -33,15 +62,16 @@ export async function generateNotebook(input: NotebookInput): Promise<string> {
     {
       stage: 'notebook',
       temperature: 0.3,
-      maxTokens: 1200,
+      maxTokens,
       system:
         'You are a knowledge-base note-taker. Produce a clean, structured Markdown summary of the content for later review. ' +
         'Format exactly:\n' +
         '## TL;DR\nOne or two crisp sentences capturing the core point.\n\n' +
-        '## Key points\n- 4 to 8 specific, factual bullets (names, numbers, claims, definitions).\n\n' +
+        `## Key points\n- ${bullets} specific, factual bullets (names, numbers, claims, definitions).\n\n` +
         '## Notes\n- Any caveats, open questions, or notable details (optional; omit the section if nothing fits).\n\n' +
         'Rules: be specific and concrete; preserve key terminology; no preamble, no "this article"; ' +
-        'output ONLY the Markdown, starting with "## TL;DR".',
+        'output ONLY the Markdown, starting with "## TL;DR".' +
+        extra,
     },
   )
   const cleaned = md.trim()
@@ -85,15 +115,16 @@ export function extractTldr(notebook: string): string {
 export async function generateNotebooks(
   inputs: NotebookInput[],
   onProgress?: (current: number, total: number) => void,
+  style?: NotebookStyle,
 ): Promise<Map<string, string>> {
   const results = new Map<string, string>()
-  const concurrency = 3 // single local LLM — keep it gentle
+  const concurrency = 3 // single local LLM, keep it gentle
   for (let i = 0; i < inputs.length; i += concurrency) {
     const batch = inputs.slice(i, i + concurrency)
     const out = await Promise.all(
       batch.map(async (input) => {
         try {
-          return { id: input.id, md: await generateNotebook(input) }
+          return { id: input.id, md: await generateNotebook(input, style) }
         } catch {
           return { id: input.id, md: '' }
         }

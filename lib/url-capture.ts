@@ -1,6 +1,12 @@
 import { createHash } from 'crypto'
 import { extractArticle, extractPageMetadata, providerFromUrl, type ExtractedArticle, type PageMetadata } from '@/lib/extract/article'
-import { transcribeMediaPage, transcriptionConfigured, directAudioUrl, isLikelyFeedUrl } from '@/lib/media-transcription'
+import { transcribeMediaPage, transcriptionConfigured } from '@/lib/media-transcription'
+import { classifyCaptureUrl, type CaptureProvider } from '@/lib/capture-platform'
+
+// Classification lives in lib/capture-platform.ts so client components can share
+// it; this module is server-only (jsdom, Readability, node:crypto).
+export { classifyCaptureUrl }
+export type { CaptureProvider }
 
 export type CaptureStatus = 'organizing' | 'failed'
 
@@ -25,12 +31,6 @@ export type CaptureResult = {
   }
 }
 
-export type CaptureProvider = {
-  platform: string
-  sourceType: 'url' | 'media'
-  mediaType?: 'audio' | 'video'
-}
-
 const MEDIA_READER_TEXT_MIN_CHARS = 500
 
 const FAILED_CAPTURE_MESSAGE =
@@ -40,38 +40,6 @@ const MEDIA_METADATA_CAPTURE_MESSAGE =
   'Media page saved with source metadata. Retry extraction later if captions or local transcription become available.'
 
 const YOUTUBE_TRANSCRIPT_MIN_CHARS = 120
-
-export function classifyCaptureUrl(url: string): CaptureProvider {
-  const hostname = hostForUrl(url)
-  if (hostname === 'youtu.be' || hostMatches(hostname, 'youtube.com')) {
-    return { platform: 'youtube', sourceType: 'media', mediaType: 'video' }
-  }
-  if (hostMatches(hostname, 'vimeo.com')) {
-    return { platform: 'vimeo', sourceType: 'media', mediaType: 'video' }
-  }
-  if (hostMatches(hostname, 'tiktok.com')) {
-    return { platform: 'tiktok', sourceType: 'media', mediaType: 'video' }
-  }
-  if (hostMatches(hostname, 'spotify.com')) {
-    return { platform: 'spotify', sourceType: 'media', mediaType: 'audio' }
-  }
-  if (hostMatches(hostname, 'podcasts.apple.com')) {
-    return { platform: 'apple-podcasts', sourceType: 'media', mediaType: 'audio' }
-  }
-  if (hostMatches(hostname, 'soundcloud.com')) {
-    return { platform: 'soundcloud', sourceType: 'media', mediaType: 'audio' }
-  }
-  if (hostMatches(hostname, 'bandcamp.com')) {
-    return { platform: 'bandcamp', sourceType: 'media', mediaType: 'audio' }
-  }
-  if (hostMatches(hostname, 'threads.net')) return { platform: 'threads', sourceType: 'url' }
-  if (hostMatches(hostname, 'instagram.com')) return { platform: 'instagram', sourceType: 'url' }
-  if (hostMatches(hostname, 'reddit.com')) return { platform: 'reddit', sourceType: 'url' }
-  // Direct audio files + generic podcast/RSS feeds (any host) are transcribable.
-  if (directAudioUrl(url)) return { platform: 'direct-audio', sourceType: 'media', mediaType: 'audio' }
-  if (isLikelyFeedUrl(url)) return { platform: 'podcast-rss', sourceType: 'media', mediaType: 'audio' }
-  return { platform: 'web', sourceType: 'url' }
-}
 
 export function generatePostIdFromUrl(url: string): string {
   return createHash('sha256').update(url).digest('base64url')
@@ -471,14 +439,3 @@ function cleanText(value: string): string {
   return value.replace(/\n{3,}/g, '\n\n').trim()
 }
 
-function hostForUrl(url: string): string {
-  try {
-    return new URL(url).hostname.toLowerCase().replace(/^www\./, '')
-  } catch {
-    return ''
-  }
-}
-
-function hostMatches(hostname: string, domain: string): boolean {
-  return hostname === domain || hostname.endsWith(`.${domain}`)
-}
