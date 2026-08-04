@@ -5,7 +5,7 @@ services:
     container_name: recall
     restart: unless-stopped
     ports:
-      - "3011:3000"
+      - "127.0.0.1:3011:3000"
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
