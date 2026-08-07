@@ -1,5 +1,6 @@
 import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
+import { safeFetch } from '@/lib/url-safety'
 
 export interface ExtractedArticle {
   title: string
@@ -66,7 +67,7 @@ function pageMetadata(doc: Document, url: string): PageMetadata {
  * OG metadata.
  */
 export async function extractArticle(url: string): Promise<ExtractedArticle> {
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     headers: {
       'User-Agent':
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
@@ -106,7 +107,7 @@ export async function extractArticle(url: string): Promise<ExtractedArticle> {
 
 /** Fetches only standard page metadata for source types that do not expose reader text. */
 export async function extractPageMetadata(url: string): Promise<PageMetadata> {
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     headers: {
       'User-Agent':
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +

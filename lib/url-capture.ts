@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import { extractArticle, extractPageMetadata, providerFromUrl, type ExtractedArticle, type PageMetadata } from '@/lib/extract/article'
 import { transcribeMediaPage, transcriptionConfigured } from '@/lib/media-transcription'
 import { classifyCaptureUrl, type CaptureProvider } from '@/lib/capture-platform'
+import { safeFetch } from '@/lib/url-safety'
 
 // Classification lives in lib/capture-platform.ts so client components can share
 // it; this module is server-only (jsdom, Readability, node:crypto).
@@ -283,7 +284,7 @@ type TranscriptJson = {
 }
 
 async function fetchYouTubeTranscript(url: string): Promise<YouTubeTranscript | null> {
-  const htmlRes = await fetch(url, {
+  const htmlRes = await safeFetch(url, {
     headers: mediaFetchHeaders(),
     signal: AbortSignal.timeout(15000),
   })

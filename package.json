@@ -12,7 +12,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:demo": "tsx prisma/seed.ts --demo",
     "db:studio": "prisma studio",
-    "test": "tsx scripts/check-xss-sanitization.ts && tsx scripts/check-error-leak.ts && tsx scripts/check-url-safety.ts && tsx scripts/check-triage.ts && tsx scripts/check-boot-schema.ts && tsx scripts/check-local-ai-fallbacks.ts && tsx scripts/check-quiz-mcq.ts && tsx scripts/check-review-activity.ts && tsx scripts/check-tts.ts && tsx scripts/check-media-transcription.ts && tsx scripts/check-force-layout.ts && tsx scripts/check-app-preferences.ts && tsx scripts/check-knowledge-graph.ts && tsx scripts/check-library-view.ts && tsx scripts/check-tag-crud.ts && tsx scripts/check-markdown-links.ts && tsx scripts/check-card-panes.ts && tsx scripts/check-quiz-review-batch.ts"
+    "test": "tsx scripts/check-xss-sanitization.ts && tsx scripts/check-error-leak.ts && tsx scripts/check-url-safety.ts && tsx scripts/check-triage.ts && tsx scripts/check-boot-schema.ts && tsx scripts/check-local-ai-fallbacks.ts && tsx scripts/check-quiz-mcq.ts && tsx scripts/check-review-activity.ts && tsx scripts/check-tts.ts && tsx scripts/check-media-transcription.ts && tsx scripts/check-force-layout.ts && tsx scripts/check-app-preferences.ts && tsx scripts/check-knowledge-graph.ts && tsx scripts/check-library-view.ts && tsx scripts/check-tag-crud.ts && tsx scripts/check-markdown-links.ts && tsx scripts/check-card-panes.ts && tsx scripts/check-quiz-review-batch.ts",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -27,7 +28,7 @@
     "jsdom": "^29.1.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.577.0",
-    "next": "^16.2.6",
+    "next": "^16.2.11",
     "openai": "^6.37.0",
     "pdf-parse": "^2.4.5",
     "prisma": "^7.8.0",
@@ -48,8 +49,12 @@
     "typescript": "^5"
   },
   "overrides": {
-    "postcss": ">=8.5.10",
+    "postcss": ">=8.5.23",
     "@hono/node-server": ">=1.19.13",
-    "hono": ">=4.12.25"
+    "hono": ">=4.12.27",
+    "undici": ">=7.28.0 <8",
+    "js-yaml": ">=4.3.1",
+    "fast-uri": ">=3.1.5",
+    "valibot": ">=1.4.2"
   }
 }
