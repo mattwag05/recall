@@ -22,7 +22,7 @@
     "@prisma/adapter-better-sqlite3": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "better-sqlite3": "^12.9.0",
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.4.13",
     "dotenv": "^17.4.2",
     "jsdom": "^29.1.1",
     "jszip": "^3.10.1",
