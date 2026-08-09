@@ -41,12 +41,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - default
-      - sherpa_onnx
     volumes:
       - /mnt/storage/appdata/recall/data:/data
       - /mnt/storage/appdata/recall/media:/app/public/media
 
-networks:
-  sherpa_onnx:
-    external: true
-    name: sherpa-onnx_default
