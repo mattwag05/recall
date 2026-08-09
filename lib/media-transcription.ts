@@ -1,3 +1,5 @@
+import { safeFetch } from '@/lib/url-safety'
+
 export type MediaTranscript = {
   text: string
   source: string
@@ -71,7 +73,7 @@ export function isLikelyFeedUrl(url: string): boolean {
 }
 
 async function resolveFeedAudio(url: string): Promise<{ audioUrl: string; title?: string } | null> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
+  const res = await safeFetch(url, { signal: AbortSignal.timeout(15000) })
   if (!res.ok) throw new Error(`Feed fetch failed: ${res.status}`)
   const feed = await res.text()
   return audioFromRss(feed)
@@ -161,13 +163,13 @@ async function transcribeAudioUrl(audioUrl: string): Promise<string> {
 
 async function fetchAudio(audioUrl: string): Promise<{ bytes: ArrayBuffer; contentType: string | null }> {
   const maxBytes = maxAudioBytes()
-  const head = await fetch(audioUrl, { method: 'HEAD', signal: AbortSignal.timeout(15000) }).catch(() => null)
+  const head = await safeFetch(audioUrl, { method: 'HEAD', signal: AbortSignal.timeout(15000) }).catch(() => null)
   const contentLength = head?.headers.get('content-length')
   if (contentLength && Number(contentLength) > maxBytes) {
     throw new Error(`Audio is larger than TRANSCRIPTION_MAX_AUDIO_MB (${Math.ceil(Number(contentLength) / 1024 / 1024)} MB).`)
   }
 
-  const res = await fetch(audioUrl, { signal: AbortSignal.timeout(120000) })
+  const res = await safeFetch(audioUrl, { signal: AbortSignal.timeout(120000) })
   if (!res.ok) throw new Error(`Audio fetch failed: ${res.status}`)
   const bytes = await res.arrayBuffer()
   if (bytes.byteLength > maxBytes) {
