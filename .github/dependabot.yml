@@ -23,25 +23,11 @@ updates:
       prefix-development: "chore"
       include: "scope"
 
-  - package-ecosystem: "npm"
-    directory: "/mcp-server"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "America/New_York"
-    groups:
-      production-deps:
-        dependency-type: "production"
-        update-types:
-          - "patch"
-          - "minor"
-      dev-deps:
-        dependency-type: "development"
-        update-types:
-          - "patch"
-          - "minor"
-    commit-message:
-      prefix: "fix"
-      prefix-development: "chore"
-      include: "scope"
+# NOTE: there was a second npm entry here for directory "/mcp-server". That
+# directory has never existed in this repo -- verified 2026-08-12 across every
+# ref, every tree in history, and the deleted-file log -- so it was aspirational
+# config, not an accidental deletion. Dependabot failed it on every weekly run
+# since the repo's initial release (2026-07-17) with
+# "dependency_file_not_found: /mcp-server/package.json not found", producing one
+# red job beside the green root one every Monday. Re-add it only alongside a real
+# mcp-server/package.json.
