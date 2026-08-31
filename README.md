@@ -291,7 +291,7 @@ Configured via `.env` (see `.env` in the repo root):
 > Both models "think". Recall disables it per-provider so JSON/structured stages
 > stay clean: local server → `chat_template_kwargs.enable_thinking=false`; Ollama →
 > `reasoning_effort="none"`. Run one large local LLM at a time —
-> `Qwen3.6-35B` can sit right at the local server's memory ceiling.
+> `Qwen3.8-27B-4bit` is the retained general oMLX model and uses about 15.7 GB.
 
 Settings → Intelligence → Model endpoint exposes polished provider presets for
 Ollama, LM Studio, a local OpenAI-compatible server, OpenRouter, and any custom OpenAI-compatible endpoint.
