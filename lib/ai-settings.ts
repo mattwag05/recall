@@ -1,7 +1,7 @@
 export const AI_PROVIDER_OPTIONS = [
   { id: 'ollama', label: 'Ollama', defaultBaseUrl: 'http://127.0.0.1:11434/v1', defaultModel: 'gemma4:latest', keyRequired: false },
   { id: 'lmstudio', label: 'LM Studio', defaultBaseUrl: 'http://127.0.0.1:1234/v1', defaultModel: 'local-model', keyRequired: false },
-  { id: 'omlx', label: 'Local LLM', defaultBaseUrl: 'http://localhost:8000/v1', defaultModel: 'Qwen3.6-35B-A3B-4bit', keyRequired: true },
+  { id: 'omlx', label: 'Local LLM', defaultBaseUrl: 'http://localhost:8000/v1', defaultModel: 'Qwen3.8-27B-4bit', keyRequired: true },
   { id: 'openrouter', label: 'OpenRouter', defaultBaseUrl: 'https://openrouter.ai/api/v1', defaultModel: '', keyRequired: true },
   { id: 'custom', label: 'OpenAI-compatible', defaultBaseUrl: '', defaultModel: '', keyRequired: false },
 ] as const

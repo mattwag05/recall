@@ -273,7 +273,7 @@ Configured via `.env` (see `.env` in the repo root):
 | `LLM_API_KEY` | provider/env default | Generic API key override for remote endpoints |
 | `OMLX_BASE_URL` | `http://localhost:8000/v1` | Local OpenAI-compatible endpoint |
 | `OMLX_API_KEY` | — | API key for the local server, if it requires one |
-| `OMLX_MODEL` | `Qwen3.6-35B-A3B-4bit` | |
+| `OMLX_MODEL` | `Qwen3.8-27B-4bit` | |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434/v1` | fallback |
 | `OLLAMA_MODEL` | `gemma4:latest` | The deploy compose defaults to `functiongemma:270m-it-fp16`; override when a larger local chat model is installed |
 | `VISION_MODEL` | provider chat model | Optional local vision-capable chat model for image OCR/vision attachments |
