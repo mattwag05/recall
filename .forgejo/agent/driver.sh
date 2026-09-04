@@ -54,12 +54,12 @@ run_pi() {  # $1 = prompt (workdir = cwd) ; prints pi output to stdout
     providers: { local: {
       baseUrl: $base, api: "openai-completions", apiKey: $key, authHeader: true,
       compat: { supportsDeveloperRole: false },
-      models: [ { id: "Qwen3.8-27B-4bit", name: "Qwen3.8-27B-4bit",
+      models: [ { id: "Ornith-1.5-35B-A3B-MLX-4bit", name: "Ornith-1.5-35B-A3B-MLX-4bit",
                   reasoning: false, input: ["text"],
                   cost: {input:0,output:0,cacheRead:0,cacheWrite:0},
                   contextWindow: 131072, maxTokens: 64000 } ]
     } } }' > "$pihome/.pi/agent/models.json"
-  printf '{"defaultProvider":"local","defaultModel":"Qwen3.8-27B-4bit"}\n' > "$pihome/.pi/agent/settings.json"
+  printf '{"defaultProvider":"local","defaultModel":"Ornith-1.5-35B-A3B-MLX-4bit"}\n' > "$pihome/.pi/agent/settings.json"
   # ponytail: fixed 2x120s retry for transient local-LLM capacity errors (507 model-load /
   # 400 prefill-guard while another model is resident on the server; its TTL is 120s).
   # Upgrade path: probe $LLM_BASE/models before invoking if this proves noisy.

@@ -273,7 +273,7 @@ Configured via `.env` (see `.env` in the repo root):
 | `LLM_API_KEY` | provider/env default | Generic API key override for remote endpoints |
 | `OMLX_BASE_URL` | `http://localhost:8000/v1` | Local OpenAI-compatible endpoint |
 | `OMLX_API_KEY` | — | API key for the local server, if it requires one |
-| `OMLX_MODEL` | `Qwen3.8-27B-4bit` | |
+| `OMLX_MODEL` | `Ornith-1.5-35B-A3B-MLX-4bit` | Official ornith-ai MLX checkpoint; text-only |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434/v1` | fallback |
 | `OLLAMA_MODEL` | `gemma4:latest` | The deploy compose defaults to `functiongemma:270m-it-fp16`; override when a larger local chat model is installed |
 | `VISION_MODEL` | provider chat model | Optional local vision-capable chat model for image OCR/vision attachments |
@@ -291,7 +291,11 @@ Configured via `.env` (see `.env` in the repo root):
 > Both models "think". Recall disables it per-provider so JSON/structured stages
 > stay clean: local server → `chat_template_kwargs.enable_thinking=false`; Ollama →
 > `reasoning_effort="none"`. Run one large local LLM at a time —
-> `Qwen3.8-27B-4bit` is the retained general oMLX model and uses about 15.7 GB.
+> `Ornith-1.5-35B-A3B-MLX-4bit` is the general oMLX default. Its weights are
+> approximately 19.5 GB (18.2 GiB); runtime memory also includes context/cache
+> overhead. This checkpoint is text-only: configure a separate vision-capable
+> `VISION_MODEL` for attachments. Saved Settings and environment overrides take
+> precedence over these defaults; changing defaults does not rewrite them.
 
 Settings → Intelligence → Model endpoint exposes polished provider presets for
 Ollama, LM Studio, a local OpenAI-compatible server, OpenRouter, and any custom OpenAI-compatible endpoint.

@@ -11,7 +11,7 @@ import { normalizeAiProvider, providerDefaults, providerNeedsKey, type AiProvide
  *
  * Both are thinking models; we disable thinking per-provider so structured
  * (JSON) stages don't burn the token budget on reasoning:
- *   - local server (Qwen3.8): chat_template_kwargs.enable_thinking = false
+ *   - local server (Ornith 1.5): chat_template_kwargs.enable_thinking = false
  *   - Ollama (gemma4): reasoning_effort = "none"
  *
  * ⚠️ Known gap (recall-mok): AI_PROVIDER_OPTIONS also offers openrouter,
@@ -26,7 +26,7 @@ import { normalizeAiProvider, providerDefaults, providerNeedsKey, type AiProvide
 
 const OMLX_BASE = process.env.OMLX_BASE_URL || 'http://localhost:8000/v1'
 const OMLX_KEY = process.env.OMLX_API_KEY || ''
-const OMLX_MODEL = process.env.OMLX_MODEL || 'Qwen3.8-27B-4bit'
+const OMLX_MODEL = process.env.OMLX_MODEL || 'Ornith-1.5-35B-A3B-MLX-4bit'
 
 const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434/v1'
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:latest'
