@@ -23,7 +23,12 @@ try {
   ]) {
     const trace = join(root, 'trace')
     writeFileSync(trace, '')
-    const env: NodeJS.ProcessEnv = { PATH: root + ':/usr/bin:/bin', BOOT_TRACE: trace, SCHEMA_EXIT: fixture.schemaExit }
+    const env: NodeJS.ProcessEnv = {
+      PATH: root + ':/usr/bin:/bin',
+      BOOT_TRACE: trace,
+      SCHEMA_EXIT: fixture.schemaExit,
+      NODE_ENV: 'test',
+    }
     if (fixture.apply !== undefined) env.RECALL_APPLY_SCHEMA = fixture.apply
     const result = spawnSync('/bin/sh', [boot], { env, encoding: 'utf8', timeout: 5000 })
     assert.equal(result.status, fixture.status, result.stderr)

@@ -29,6 +29,8 @@ function getPurify() {
   if (typeof window !== "undefined") {
     _purify = DOMPurify(window)
   } else {
+    // Kept runtime-only so jsdom and its Node built-ins never enter the browser bundle.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { JSDOM } = require("jsdom")
     _purify = DOMPurify(new JSDOM("").window)
   }
