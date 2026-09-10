@@ -3,6 +3,7 @@ services:
     build:
       context: .
     container_name: recall
+    command: ["node", "server.js"]
     restart: unless-stopped
     ports:
       - "127.0.0.1:3011:3000"
