@@ -1,66 +1,40 @@
-// The production boot script runs `prisma db push` against a live database.
-// Two ways that has already gone wrong, both guarded here:
-//
-//  1. Without --accept-data-loss the push ABORTS, because the FTS5 virtual
-//     tables (bookmark_fts*) are not Prisma models and it wants to drop them.
-//     The container then crash-loops on boot and the app never starts.
-//  2. "Fixing" that by skipping the push when the database already exists —
-//     the original behaviour — means schema changes never reach a deployed
-//     database at all.
-//
-// Dropping the FTS tables is only acceptable because initFts() rebuilds them,
-// so that property is asserted too rather than assumed.
+// Execute the production entrypoint with isolated command stand-ins.
+// Normal restarts preserve schema; reviewed schema failures prevent startup.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 
+const boot = join(process.cwd(), 'scripts/start-production.sh')
+const root = mkdtempSync(join(tmpdir(), 'recall-boot-check-'))
 let passed = 0
-let failed = 0
-
-function check(label: string, fn: () => void) {
-  try {
-    fn()
-    passed++
-  } catch (err) {
-    failed++
-    console.error(`FAIL: ${label}\n  ${err instanceof Error ? err.message : String(err)}`)
+try {
+  for (const name of ['node', 'npx']) {
+    writeFileSync(join(root, name), '#!/bin/sh\nprintf "%s\\n" "' + name + ' $*" >> "$BOOT_TRACE"\n' +
+      (name === 'npx' ? 'exit "${SCHEMA_EXIT:-0}"\n' : ''), { mode: 0o700 })
   }
-}
-
-const boot = readFileSync(join(process.cwd(), 'scripts/start-production.sh'), 'utf8')
-
-check('boot script runs prisma db push', () => {
-  assert.match(boot, /npx prisma db push/, 'boot must apply the schema')
-})
-
-check('the push carries --accept-data-loss', () => {
-  assert.match(
-    boot,
-    /npx prisma db push --accept-data-loss/,
-    'without this flag the push aborts on the FTS tables and the container crash-loops',
-  )
-})
-
-check('the push is unconditional', () => {
-  // A guard around the push is how schema changes silently stopped applying.
-  // Match a shell `if` at the start of a line — a bare /if/ also hits the
-  // "specific" in this file's own comments.
-  assert.ok(
-    !/^\s*if\b/m.test(boot),
-    'the push must not be conditional on the database already existing',
-  )
-})
-
-const fts = readFileSync(join(process.cwd(), 'lib/fts.ts'), 'utf8')
-
-check('initFts recreates the FTS table when missing', () => {
+  for (const fixture of [
+    { apply: undefined, schemaExit: '0', status: 0, trace: ['node server.js'] },
+    { apply: '0', schemaExit: '0', status: 0, trace: ['node server.js'] },
+    { apply: 'true', schemaExit: '0', status: 0, trace: ['node server.js'] },
+    { apply: '1', schemaExit: '0', status: 0, trace: ['npx prisma db push', 'node server.js'] },
+    { apply: '1', schemaExit: '7', status: 7, trace: ['npx prisma db push'] },
+  ]) {
+    const trace = join(root, 'trace')
+    writeFileSync(trace, '')
+    const env: NodeJS.ProcessEnv = { PATH: root + ':/usr/bin:/bin', BOOT_TRACE: trace, SCHEMA_EXIT: fixture.schemaExit }
+    if (fixture.apply !== undefined) env.RECALL_APPLY_SCHEMA = fixture.apply
+    const result = spawnSync('/bin/sh', [boot], { env, encoding: 'utf8', timeout: 5000 })
+    assert.equal(result.status, fixture.status, result.stderr)
+    assert.deepEqual(readFileSync(trace, 'utf8').trim().split('\n'), fixture.trace)
+    passed++
+  }
+  const fts = readFileSync(join(process.cwd(), 'lib/fts.ts'), 'utf8')
   assert.match(fts, /CREATE VIRTUAL TABLE IF NOT EXISTS bookmark_fts/)
-})
-
-check('initFts repopulates an empty index from Bookmark', () => {
-  // This is what makes dropping the FTS tables on boot recoverable.
   assert.match(fts, /ftsCount === 0 && bookmarkCount > 0[\s\S]*populateFts/)
-})
-
-console.log(`\nBoot schema: ${passed} passed, ${failed} failed`)
-if (failed > 0) process.exit(1)
+  passed += 2
+  console.log(`Boot schema: ${passed} passed`)
+} finally {
+  rmSync(root, { recursive: true, force: true })
+}
