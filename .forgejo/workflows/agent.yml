@@ -1,53 +1,55 @@
 name: agent
-# Label-driven background coding agent. A human applies an `agent:*` label to an
-# issue; this fires, runs the pi agent against a local LLM server (zero API cost),
-# and transitions the issue. Every human handoff is a LABEL application (the only
-# Forgejo Actions issue-trigger we rely on) — no dependence on issue_comment events.
 on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
   issues:
     types: [labeled]
-  pull_request:
-    types: [closed]
-
+concurrency:
+  group: agent-${{ github.repository }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
 jobs:
-  agent:
-    # React only to our own labels, or to a merged agent PR (to flip the issue to done).
-    if: >-
-      (github.event_name == 'issues' && startsWith(github.event.label.name, 'agent:')) ||
-      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
-    # Host executor (NOT a container) — same runner Strix uses. Reaches the local LLM server directly.
-    runs-on: docker-host
+  validate-source:
+    if: github.repository == 'matthewwagner/shared-workflows' && (github.event_name == 'push' || github.event_name == 'pull_request')
+    runs-on: ubuntu-latest
     steps:
-      # Fully-qualified — this Forgejo requires it.
-      # `issues` events carry no code ref, so pin checkout to the default branch,
-      # else the workspace ($PWD, where pi runs) is empty and there's nothing to edit.
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - name: Test controller
+        run: python3 -m unittest discover -s tests -v
+      - name: Scan secrets with verified gitleaks
+        run: |
+          set -eu
+          case "$(uname -m)" in
+            aarch64|arm64) A=arm64; SHA=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080 ;;
+            *) A=x64; SHA=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb ;;
+          esac
+          TMP=$(mktemp -d)
+          trap 'rm -rf "$TMP"' EXIT
+          curl -fsSL --retry 3 --max-time 300 -o "$TMP/gitleaks.tar.gz" "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_${A}.tar.gz"
+          echo "$SHA  $TMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$TMP/gitleaks.tar.gz" -C "$TMP" gitleaks
+          "$TMP/gitleaks" git --no-banner --redact .
+  agent:
+    if: github.event.label.name == 'agent:queued' || github.event.label.name == 'agent:ready' || github.event.label.name == 'agent:approved' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: docker-host
+    timeout-minutes: 90
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
           ref: ${{ github.event.repository.default_branch }}
-      - name: run agent driver
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run approved coding workflow
         env:
-          # Forgejo API write token (issue+PR scope). Stored as user secret FJ_API_TOKEN
-          # (Forgejo reserves the FORGEJO_ prefix for secret names).
           FORGEJO_TOKEN: ${{ secrets.FJ_API_TOKEN }}
-          # Reuse Strix's existing local-LLM credentials — do NOT add new ones.
-          LLM_KEY:  ${{ secrets.STRIX_LLM_KEY }}
-          LLM_BASE: ${{ vars.LLM_API_BASE }}
-          # Absolute path to the globally-installed pi binary on the runner host (resolved at install time).
-          PI_BIN: ${{ vars.PI_BIN }}
-          # Adversarial reviewer: absolute path to an agent CLI on the runner host that
-          # reviews the diff against the approved spec. Must be a DIFFERENT model than the
-          # implementer, and must not be whoever approved the plan. UNSET => the review is
-          # skipped and the PR is labelled "unreviewed" rather than silently passing.
-          REVIEWER_BIN: ${{ vars.REVIEWER_BIN }}
-          # Forgejo API base reachable from the runner host.
           FORGEJO_API: ${{ vars.FJ_API_BASE }}
-          # git-SSH push path to this Forgejo instance.
+          LLM_KEY: ${{ secrets.OMLX_API_KEY }}
+          LLM_BASE: ${{ vars.LLM_API_BASE }}
+          PI_BIN: ${{ vars.PI_BIN }}
+          AGENT_SKILLS_MANIFEST: ${{ vars.AGENT_SKILLS_MANIFEST }}
           GIT_SSH_HOST: ${{ vars.GIT_SSH_HOST }}
-          GIT_SSH_PORT: "3022"
-          # SSH signing key (private, passphrase-less). Its public half is registered on the
-          # GitHub account as a *signing* key, so agent commits show Verified once mirrored.
-          # Distinct from the other keys — this one lives where agent-authored code
-          # runs, so it must be revocable on its own. Unset => agent still works, unsigned.
-          AGENT_SIGNING_KEY: ${{ secrets.AGENT_SIGNING_KEY }}
+          GIT_SSH_PORT: '3022'
         run: bash .forgejo/agent/driver.sh

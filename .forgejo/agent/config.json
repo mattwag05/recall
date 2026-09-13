@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "approvedActor": "matthewwagner",
+  "model": "Qwen3.6-35B-A3B-4bit",
+  "validationCommands": [["bash", ".forgejo/agent/validate.sh"]],
+  "validationInputs": ["package.json", "package-lock.json", "tsconfig.json", "eslint.config.mjs", "next.config.ts", "prisma.config.ts"]
+}
