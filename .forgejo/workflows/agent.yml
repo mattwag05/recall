@@ -1,5 +1,6 @@
 name: agent
 on:
+  workflow_dispatch:
   push:
   pull_request:
     types: [opened, synchronize, reopened, closed]
@@ -9,6 +10,21 @@ concurrency:
   group: agent-${{ github.repository }}-${{ github.event.issue.number }}
   cancel-in-progress: false
 jobs:
+  qualify-inference:
+    if: github.repository == 'matthewwagner/shared-workflows' && github.event_name == 'workflow_dispatch'
+    runs-on: docker-host
+    timeout-minutes: 10
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Qualify neutral inference credential and skills
+        env:
+          LLM_KEY: ${{ secrets.OMLX_API_KEY }}
+          LLM_BASE: ${{ vars.LLM_API_BASE }}
+          PI_BIN: ${{ vars.PI_BIN }}
+          AGENT_SKILLS_MANIFEST: ${{ vars.AGENT_SKILLS_MANIFEST }}
+        run: python3 .forgejo/agent/qualify.py
   validate-source:
     if: github.repository == 'matthewwagner/shared-workflows' && (github.event_name == 'push' || github.event_name == 'pull_request')
     runs-on: ubuntu-latest
@@ -52,4 +68,16 @@ jobs:
           AGENT_SKILLS_MANIFEST: ${{ vars.AGENT_SKILLS_MANIFEST }}
           GIT_SSH_HOST: ${{ vars.GIT_SSH_HOST }}
           GIT_SSH_PORT: '3022'
-        run: bash .forgejo/agent/driver.sh
+        run: |
+          set -eu
+          case "$(uname -m)" in
+            aarch64|arm64) A=arm64; SHA=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080 ;;
+            *) A=x64; SHA=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb ;;
+          esac
+          SCANNER_DIR=$(mktemp -d)
+          trap 'rm -rf "$SCANNER_DIR"' EXIT
+          curl -fsSL --retry 3 --max-time 300 -o "$SCANNER_DIR/gitleaks.tar.gz" "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_${A}.tar.gz"
+          echo "$SHA  $SCANNER_DIR/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$SCANNER_DIR/gitleaks.tar.gz" -C "$SCANNER_DIR" gitleaks
+          export GITLEAKS_BIN="$SCANNER_DIR/gitleaks"
+          bash .forgejo/agent/driver.sh

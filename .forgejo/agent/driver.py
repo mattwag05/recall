@@ -45,7 +45,8 @@ def infer(prompt, config, implement):
                 "--tools", "read,bash,edit,write" if implement else "read,grep,find,ls"]
         for skill in skills:
             args.extend(["--skill", skill])
-        return run(args + ["-p", "--", prompt], env=child_env(home), timeout=1800)
+        deadline = min(1800, max(1, int(config.get("inferenceTimeoutSeconds", 1800))))
+        return run(args + ["-p", "--", prompt], env=child_env(home), timeout=deadline)
 
 
 def main():
@@ -146,6 +147,12 @@ def main():
         if Path(path).is_file() and any(os.environ[k].encode() in Path(path).read_bytes() for k in ("FORGEJO_TOKEN", "LLM_KEY") if os.environ.get(k)):
             raise RuntimeError("Credential found in changed file")
     git("add", "--", *paths)
+    scanner = Path(os.environ["GITLEAKS_BIN"]).resolve()
+    if not scanner.is_file() or Path.cwd().resolve() in scanner.parents:
+        raise RuntimeError("Trusted external secret scanner required")
+    with tempfile.TemporaryDirectory(prefix="forgejo-scan-") as home:
+        run([str(scanner), "git", "--pre-commit", "--staged", "--ignore-gitleaks-allow", "--no-banner", "--redact", "."],
+            env=child_env(home), timeout=300)
     git("-c", "user.name=pi-agent", "-c", "user.email=pi-agent@noreply.local", "-c", "commit.gpgsign=false", "commit", "-m", f"fix: implement issue #{number}")
     default = event["repository"]["default_branch"]
     git("fetch", "origin", default)
