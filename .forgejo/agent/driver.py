@@ -46,7 +46,7 @@ def infer(prompt, config, implement):
         for skill in skills:
             args.extend(["--skill", skill])
         deadline = min(1800, max(1, int(config.get("inferenceTimeoutSeconds", 1800))))
-        return run(args + ["-p", "--", prompt], env=child_env(home), timeout=deadline)
+        return run(args + ["-p", prompt], env=child_env(home), timeout=deadline)
 
 
 def main():

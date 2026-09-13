@@ -24,7 +24,8 @@ jobs:
           LLM_BASE: ${{ vars.LLM_API_BASE }}
           PI_BIN: ${{ vars.PI_BIN }}
           AGENT_SKILLS_MANIFEST: ${{ vars.AGENT_SKILLS_MANIFEST }}
-        run: python3 .forgejo/agent/qualify.py
+        # The runner injects a built-in token even when none is declared above.
+        run: env -u FORGEJO_TOKEN -u GITHUB_TOKEN -u GITEA_TOKEN python3 .forgejo/agent/qualify.py
   validate-source:
     if: github.repository == 'matthewwagner/shared-workflows' && (github.event_name == 'push' || github.event_name == 'pull_request')
     runs-on: ubuntu-latest
