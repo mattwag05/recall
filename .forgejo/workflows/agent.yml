@@ -20,8 +20,8 @@ jobs:
           persist-credentials: false
       - name: Qualify neutral inference credential and skills
         env:
-          LLM_KEY: ${{ secrets.OMLX_API_KEY }}
-          LLM_BASE: ${{ vars.LLM_API_BASE }}
+          LLM_KEY: ${{ secrets.LOCAL_INFERENCE_API_KEY }}
+          LLM_BASE: ${{ vars.LOCAL_INFERENCE_BASE }}
           PI_BIN: ${{ vars.PI_BIN }}
           AGENT_SKILLS_MANIFEST: ${{ vars.AGENT_SKILLS_MANIFEST }}
         # The runner injects a built-in token even when none is declared above.
@@ -63,8 +63,8 @@ jobs:
         env:
           FORGEJO_TOKEN: ${{ secrets.FJ_API_TOKEN }}
           FORGEJO_API: ${{ vars.FJ_API_BASE }}
-          LLM_KEY: ${{ secrets.OMLX_API_KEY }}
-          LLM_BASE: ${{ vars.LLM_API_BASE }}
+          LLM_KEY: ${{ secrets.LOCAL_INFERENCE_API_KEY }}
+          LLM_BASE: ${{ vars.LOCAL_INFERENCE_BASE }}
           PI_BIN: ${{ vars.PI_BIN }}
           AGENT_SKILLS_MANIFEST: ${{ vars.AGENT_SKILLS_MANIFEST }}
           GIT_SSH_HOST: ${{ vars.GIT_SSH_HOST }}

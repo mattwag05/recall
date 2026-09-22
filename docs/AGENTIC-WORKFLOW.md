@@ -40,4 +40,4 @@ The project's canonical instruction file points here and to its own bindings. Bi
 
 Triage roles are `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`, mapped to existing labels where appropriate. These labels classify work. They do not authorize publication. The separate `agent:*` labels belong to the opt-in background coding workflow.
 
-Background coding uses the same process with deterministic approval and verification gates. It loads the recorded skills into its isolated Pi environment, defaults to local Qwen3.6, and offers Qwen3.8 only by explicit selection. Failed or missing gates produce no publication. Adopting this guide does not enable background jobs.
+Background coding uses the same process with deterministic approval and verification gates. It loads the recorded skills into its isolated Pi environment, defaults to `incoai/Qwen3.8-27B-Splash` through the shared Splash service. Failed or missing gates produce no publication. Adopting this guide does not enable background jobs.

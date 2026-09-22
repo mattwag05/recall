@@ -12,7 +12,7 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
       DATABASE_PATH: /data/recall.db
       DATABASE_URL: file:/data/recall.db
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_PROVIDER: ${LLM_PROVIDER:-splash}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
@@ -38,6 +38,9 @@ services:
       OMLX_BASE_URL: ${OMLX_BASE_URL:-}
       OMLX_API_KEY: ${OMLX_API_KEY:-}
       OMLX_MODEL: ${OMLX_MODEL:-}
+      SPLASH_BASE_URL: ${SPLASH_BASE_URL:-}
+      SPLASH_API_KEY: ${SPLASH_API_KEY:-}
+      SPLASH_MODEL: ${SPLASH_MODEL:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -45,4 +48,3 @@ services:
     volumes:
       - /mnt/storage/appdata/recall/data:/data
       - /mnt/storage/appdata/recall/media:/app/public/media
-

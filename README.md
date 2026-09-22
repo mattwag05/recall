@@ -267,13 +267,16 @@ Configured via `.env` (see `.env` in the repo root):
 
 | Variable | Default | Notes |
 |---|---|---|
-| `LLM_PROVIDER` | `omlx` | `omlx`, `ollama`, `lmstudio`, `openrouter`, or `custom`; Settings can override this locally |
+| `LLM_PROVIDER` | `splash` | `splash`, `omlx`, `ollama`, `lmstudio`, `openrouter`, or `custom`; Settings can override this locally |
 | `LLM_BASE_URL` | provider default | Generic OpenAI-compatible chat endpoint override |
 | `LLM_MODEL` | provider default | Generic chat model override |
 | `LLM_API_KEY` | provider/env default | Generic API key override for remote endpoints |
-| `OMLX_BASE_URL` | `http://localhost:8000/v1` | Local OpenAI-compatible endpoint |
-| `OMLX_API_KEY` | — | API key for the local server, if it requires one |
-| `OMLX_MODEL` | `Qwen3.8-27B-oQ4e-mtp` | Embedded-MTP Qwen3.8 oMLX checkpoint; text-only |
+| `SPLASH_BASE_URL` | `http://127.0.0.1:8001/v1` | Default local text endpoint |
+| `SPLASH_API_KEY` | — | API key for Splash |
+| `SPLASH_MODEL` | `incoai/Qwen3.8-27B-Splash` | Default local text model |
+| `OMLX_BASE_URL` | `http://localhost:8000/v1` | oMLX endpoint retained for vision |
+| `OMLX_API_KEY` | — | API key for oMLX |
+| `OMLX_MODEL` | `MiniCPM-V-4.6-4bit` | oMLX vision model |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434/v1` | fallback |
 | `OLLAMA_MODEL` | `gemma4:latest` | The deploy compose defaults to `functiongemma:270m-it-fp16`; override when a larger local chat model is installed |
 | `VISION_MODEL` | provider chat model | Optional local vision-capable chat model for image OCR/vision attachments |
@@ -288,17 +291,13 @@ Configured via `.env` (see `.env` in the repo root):
 | `TTS_MODEL` | `kokoro` | Model name sent to the TTS endpoint |
 | `TTS_VOICE` | `af_heart` | Kokoro voice for synthesized summaries |
 
-> Both models "think". Recall disables it per-provider so JSON/structured stages
-> stay clean: local server → `chat_template_kwargs.enable_thinking=false`; Ollama →
-> `reasoning_effort="none"`. Run one large local LLM at a time —
-> `Qwen3.8-27B-oQ4e-mtp` is the general oMLX default. Its embedded MTP path is
-> configured on the M5 with Lightning MTP and QxA8 prefill; runtime memory also
-> includes context/cache overhead. This checkpoint is text-only: configure a separate vision-capable
-> `VISION_MODEL` for attachments. Saved Settings and environment overrides take
+> Splash serves Qwen3.8 for local text inference. oMLX remains available for
+> `MiniCPM-V-4.6-4bit` vision requests. Recall still disables Ollama reasoning
+> when that fallback is selected. Saved Settings and environment overrides take
 > precedence over these defaults; changing defaults does not rewrite them.
 
 Settings → Intelligence → Model endpoint exposes polished provider presets for
-Ollama, LM Studio, a local OpenAI-compatible server, OpenRouter, and any custom OpenAI-compatible endpoint.
+Splash, oMLX, Ollama, LM Studio, OpenRouter, and any custom OpenAI-compatible endpoint.
 API keys are write-only in the browser UI; leaving the key field blank preserves
 the saved/env key, while Clear removes the locally saved key. Chat and embedding
 endpoints can be tested separately before running enrichment.

@@ -6,12 +6,12 @@ import { normalizeAiProvider, providerDefaults, providerNeedsKey, type AiProvide
  * LLM client for Recall.
  *
  * Provider-aware so the prototype can run fully local:
- *   - "omlx"   → local OpenAI-compatible server (default)
+ *   - "splash" → local OpenAI-compatible text server (default)
+ *   - "omlx"   → local vision server
  *   - "ollama" → Ollama OpenAI-compatible server (fallback)
  *
- * Both are thinking models; we disable thinking per-provider so structured
- * (JSON) stages don't burn the token budget on reasoning:
- *   - local server (Qwen3.8 MTP): chat_template_kwargs.enable_thinking = false
+ * We disable Ollama reasoning so structured JSON stages do not burn the token
+ * budget on a hidden reasoning pass:
  *   - Ollama (gemma4): reasoning_effort = "none"
  *
  * ⚠️ Known gap (recall-mok): AI_PROVIDER_OPTIONS also offers openrouter,
@@ -24,9 +24,13 @@ import { normalizeAiProvider, providerDefaults, providerNeedsKey, type AiProvide
  * add a batched JSON stage before that bug is fixed.
  */
 
+const SPLASH_BASE = process.env.SPLASH_BASE_URL || 'http://127.0.0.1:8001/v1'
+const SPLASH_KEY = process.env.SPLASH_API_KEY || ''
+const SPLASH_MODEL = process.env.SPLASH_MODEL || 'incoai/Qwen3.8-27B-Splash'
+
 const OMLX_BASE = process.env.OMLX_BASE_URL || 'http://localhost:8000/v1'
 const OMLX_KEY = process.env.OMLX_API_KEY || ''
-const OMLX_MODEL = process.env.OMLX_MODEL || 'Qwen3.8-27B-oQ4e-mtp'
+const OMLX_MODEL = process.env.OMLX_MODEL || 'MiniCPM-V-4.6-4bit'
 
 const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434/v1'
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:latest'
@@ -72,9 +76,7 @@ export async function getModel(stage: string): Promise<string> {
 function noThinkExtra(provider: AiProvider): Record<string, unknown> {
   return provider === 'ollama'
     ? { reasoning_effort: 'none' }
-    : provider === 'omlx'
-      ? { chat_template_kwargs: { enable_thinking: false } }
-      : {}
+    : {}
 }
 
 /** Defensive strip of any reasoning that still leaks into content. */
@@ -158,7 +160,7 @@ export async function llmVision(
 
 export async function getRuntimeLlmSettings(): Promise<RuntimeLlmSettings> {
   const values = await readAiSettingValues()
-  const provider = normalizeProvider(values.llm_provider ?? process.env.LLM_PROVIDER ?? 'omlx')
+  const provider = normalizeProvider(values.llm_provider ?? process.env.LLM_PROVIDER ?? 'splash')
   const defaults = providerDefaults(provider)
   const baseUrl = values.llm_base_url || envBaseUrl(provider) || defaults.defaultBaseUrl
   const apiKey = values.llm_api_key || envApiKey(provider)
@@ -185,11 +187,12 @@ async function readAiSettingValues(): Promise<Record<string, string>> {
 
 function normalizeProvider(value: string | null | undefined): AiProvider {
   const provider = normalizeAiProvider(value)
-  return provider === 'custom' && !value ? 'omlx' : provider
+  return provider === 'custom' && !value ? 'splash' : provider
 }
 
 function envBaseUrl(provider: AiProvider): string {
   if (process.env.LLM_BASE_URL) return process.env.LLM_BASE_URL
+  if (provider === 'splash') return SPLASH_BASE
   if (provider === 'ollama') return process.env.OLLAMA_BASE_URL || OLLAMA_BASE
   if (provider === 'lmstudio') return process.env.LMSTUDIO_BASE_URL || ''
   if (provider === 'omlx') return OMLX_BASE
@@ -199,6 +202,7 @@ function envBaseUrl(provider: AiProvider): string {
 
 function envModel(provider: AiProvider): string {
   if (process.env.LLM_MODEL) return process.env.LLM_MODEL
+  if (provider === 'splash') return SPLASH_MODEL
   if (provider === 'ollama') return OLLAMA_MODEL
   if (provider === 'lmstudio') return process.env.LMSTUDIO_MODEL || ''
   if (provider === 'omlx') return OMLX_MODEL
@@ -208,6 +212,7 @@ function envModel(provider: AiProvider): string {
 
 function envApiKey(provider: AiProvider): string {
   if (process.env.LLM_API_KEY) return process.env.LLM_API_KEY
+  if (provider === 'splash') return SPLASH_KEY
   if (provider === 'omlx') return OMLX_KEY
   if (provider === 'openrouter') return process.env.OPENROUTER_API_KEY || ''
   return ''
