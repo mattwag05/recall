@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "recall",
+  "project_id": "f28d46f7-b291-4a31-b8e6-05ad776f2d3c"
+}
