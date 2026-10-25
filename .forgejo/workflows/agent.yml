@@ -17,7 +17,7 @@ jobs:
     runs-on: docker
     container:
       image: homelab/forgejo-agent:2026-10-25
-      options: -v /home/matthewwagner/.pi/agent/skills:/home/matthewwagner/.pi/agent/skills:ro -v /home/matthewwagner/.config/agent-workflow:/home/matthewwagner/.config/agent-workflow:ro
+      options: -v /home/matthewwagner/.pi/agent/skills:/home/matthewwagner/.pi/agent/skills:ro -v /home/matthewwagner/.config/agent-workflow:/home/matthewwagner/.config/agent-workflow:ro -v /home/matthewwagner/.agents/skills:/home/matthewwagner/.agents/skills:ro
     timeout-minutes: 10
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7
@@ -79,7 +79,7 @@ jobs:
     runs-on: docker
     container:
       image: homelab/forgejo-agent:2026-10-25
-      options: -v /home/matthewwagner/.pi/agent/skills:/home/matthewwagner/.pi/agent/skills:ro -v /home/matthewwagner/.config/agent-workflow:/home/matthewwagner/.config/agent-workflow:ro
+      options: -v /home/matthewwagner/.pi/agent/skills:/home/matthewwagner/.pi/agent/skills:ro -v /home/matthewwagner/.config/agent-workflow:/home/matthewwagner/.config/agent-workflow:ro -v /home/matthewwagner/.agents/skills:/home/matthewwagner/.agents/skills:ro
     timeout-minutes: 90
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7
