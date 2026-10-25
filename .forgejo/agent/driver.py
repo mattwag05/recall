@@ -9,6 +9,10 @@ import tempfile
 import urllib.request
 from runtime import MODELS, binding, child_env, run, safe_paths
 
+# Git runs this at push time and it reads the token from the job environment,
+# so the token never lands in argv, .git/config, or the image.
+TOKEN_HELPER = '!f() { echo username=pi-agent; echo "password=$FORGEJO_TOKEN"; }; f'
+
 
 def git(*args):
     return run(["git", *args])
@@ -166,9 +170,9 @@ def main():
     git("fetch", "origin", default)
     if git("rev-parse", "FETCH_HEAD") != base:
         raise RuntimeError("Default branch moved; publication refused")
-    push_url = "ssh://git@" + os.environ["GIT_SSH_HOST"] + ":" + os.environ.get("GIT_SSH_PORT", "3022") + "/" + event["repository"]["full_name"] + ".git"
-    git("remote", "set-url", "--push", "origin", push_url)
-    git("push", "origin", "HEAD:refs/heads/" + branch)
+    web = os.environ["FORGEJO_API"].rstrip("/").removesuffix("/api/v1")
+    git("remote", "set-url", "--push", "origin", web + "/" + event["repository"]["full_name"] + ".git")
+    git("-c", "credential.helper=", "-c", "credential.helper=" + TOKEN_HELPER, "push", "origin", "HEAD:refs/heads/" + branch)
     api(repo + "/pulls", {"head": branch, "base": default, "title": f"Implement #{number}: {issue['title']}",
         "body": f"Closes #{number}\n\nModel: {config['model']}. Approval binding: `{digest}:{plan_hash}`.\n\nValidation receipts:\n```json\n{json.dumps(receipts, indent=2)}\n```"})
     state("agent:in-review")

@@ -12,7 +12,12 @@ concurrency:
 jobs:
   qualify-inference:
     if: github.repository == 'matthewwagner/shared-workflows' && github.event_name == 'workflow_dispatch'
-    runs-on: docker-host
+    # Agent jobs run in a container built from .forgejo/agent/Dockerfile, not on the
+    # runner host. Skills and their manifest are mounted read-only at their host paths.
+    runs-on: docker
+    container:
+      image: homelab/forgejo-agent:2026-10-25
+      options: -v /home/matthewwagner/.pi/agent/skills:/home/matthewwagner/.pi/agent/skills:ro -v /home/matthewwagner/.config/agent-workflow:/home/matthewwagner/.config/agent-workflow:ro
     timeout-minutes: 10
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7
@@ -26,6 +31,26 @@ jobs:
           AGENT_SKILLS_MANIFEST: ${{ vars.AGENT_SKILLS_MANIFEST }}
         # The runner injects a built-in token even when none is declared above.
         run: env -u FORGEJO_TOKEN -u GITHUB_TOKEN -u GITEA_TOKEN python3 .forgejo/agent/qualify.py
+  qualify-publish:
+    # Proves the container can authenticate an HTTPS push with FJ_API_TOKEN, without updating any ref.
+    if: github.repository == 'matthewwagner/shared-workflows' && github.event_name == 'workflow_dispatch'
+    runs-on: docker
+    container:
+      image: homelab/forgejo-agent:2026-10-25
+    timeout-minutes: 5
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Dry-run push over HTTPS
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FJ_API_TOKEN }}
+          FORGEJO_API: ${{ vars.FJ_API_BASE }}
+        run: |
+          set -eu
+          helper=$(python3 -c 'import sys; sys.path.insert(0, ".forgejo/agent"); import driver; print(driver.TOKEN_HELPER)')
+          git -c credential.helper= -c "credential.helper=$helper" push --dry-run "${FORGEJO_API%/api/v1}/${{ github.repository }}.git" HEAD:refs/heads/agent/qualify-publish-probe
   validate-source:
     if: github.repository == 'matthewwagner/shared-workflows' && (github.event_name == 'push' || github.event_name == 'pull_request')
     runs-on: ubuntu-latest
@@ -51,7 +76,10 @@ jobs:
           "$TMP/gitleaks" git --no-banner --redact .
   agent:
     if: github.event.label.name == 'agent:queued' || github.event.label.name == 'agent:ready' || github.event.label.name == 'agent:approved' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
-    runs-on: docker-host
+    runs-on: docker
+    container:
+      image: homelab/forgejo-agent:2026-10-25
+      options: -v /home/matthewwagner/.pi/agent/skills:/home/matthewwagner/.pi/agent/skills:ro -v /home/matthewwagner/.config/agent-workflow:/home/matthewwagner/.config/agent-workflow:ro
     timeout-minutes: 90
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7
@@ -67,8 +95,6 @@ jobs:
           LLM_BASE: ${{ vars.LOCAL_INFERENCE_BASE }}
           PI_BIN: ${{ vars.PI_BIN }}
           AGENT_SKILLS_MANIFEST: ${{ vars.AGENT_SKILLS_MANIFEST }}
-          GIT_SSH_HOST: ${{ vars.GIT_SSH_HOST }}
-          GIT_SSH_PORT: '3022'
         run: |
           set -eu
           case "$(uname -m)" in
