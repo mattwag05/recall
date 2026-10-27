@@ -16,7 +16,7 @@ jobs:
     # runner host. Skills and their manifest are mounted read-only at their host paths.
     runs-on: docker
     container:
-      image: homelab/forgejo-agent:2026-10-25
+      image: homelab/forgejo-agent:2026-10-27
       options: -v /home/matthewwagner/.pi/agent/skills:/home/matthewwagner/.pi/agent/skills:ro -v /home/matthewwagner/.config/agent-workflow:/home/matthewwagner/.config/agent-workflow:ro -v /home/matthewwagner/.agents/skills:/home/matthewwagner/.agents/skills:ro
     timeout-minutes: 10
     steps:
@@ -36,7 +36,7 @@ jobs:
     if: github.repository == 'matthewwagner/shared-workflows' && github.event_name == 'workflow_dispatch'
     runs-on: docker
     container:
-      image: homelab/forgejo-agent:2026-10-25
+      image: homelab/forgejo-agent:2026-10-27
     timeout-minutes: 5
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7
@@ -78,7 +78,7 @@ jobs:
     if: github.event.label.name == 'agent:queued' || github.event.label.name == 'agent:ready' || github.event.label.name == 'agent:approved' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: docker
     container:
-      image: homelab/forgejo-agent:2026-10-25
+      image: homelab/forgejo-agent:2026-10-27
       options: -v /home/matthewwagner/.pi/agent/skills:/home/matthewwagner/.pi/agent/skills:ro -v /home/matthewwagner/.config/agent-workflow:/home/matthewwagner/.config/agent-workflow:ro -v /home/matthewwagner/.agents/skills:/home/matthewwagner/.agents/skills:ro
     timeout-minutes: 90
     steps:
