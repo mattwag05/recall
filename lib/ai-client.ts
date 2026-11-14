@@ -24,9 +24,9 @@ import { normalizeAiProvider, providerDefaults, providerNeedsKey, type AiProvide
  * add a batched JSON stage before that bug is fixed.
  */
 
-const SPLASH_BASE = process.env.SPLASH_BASE_URL || 'http://127.0.0.1:8001/v1'
+const SPLASH_BASE = process.env.SPLASH_BASE_URL || 'http://127.0.0.1:8000/v1'
 const SPLASH_KEY = process.env.SPLASH_API_KEY || ''
-const SPLASH_MODEL = process.env.SPLASH_MODEL || 'incoai/Qwen3.8-27B-Splash'
+const SPLASH_MODEL = process.env.SPLASH_MODEL || 'Qwen3.8-27B-Splash'
 
 const OMLX_BASE = process.env.OMLX_BASE_URL || 'http://localhost:8000/v1'
 const OMLX_KEY = process.env.OMLX_API_KEY || ''

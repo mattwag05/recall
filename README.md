@@ -271,9 +271,9 @@ Configured via `.env` (see `.env` in the repo root):
 | `LLM_BASE_URL` | provider default | Generic OpenAI-compatible chat endpoint override |
 | `LLM_MODEL` | provider default | Generic chat model override |
 | `LLM_API_KEY` | provider/env default | Generic API key override for remote endpoints |
-| `SPLASH_BASE_URL` | `http://127.0.0.1:8001/v1` | Default local text endpoint |
+| `SPLASH_BASE_URL` | `http://127.0.0.1:8000/v1` | Default local text endpoint |
 | `SPLASH_API_KEY` | — | API key for Splash |
-| `SPLASH_MODEL` | `incoai/Qwen3.8-27B-Splash` | Default local text model |
+| `SPLASH_MODEL` | `Qwen3.8-27B-Splash` | Default local text model |
 | `OMLX_BASE_URL` | `http://localhost:8000/v1` | oMLX endpoint retained for vision |
 | `OMLX_API_KEY` | — | API key for oMLX |
 | `OMLX_MODEL` | `MiniCPM-V-4.6-4bit` | oMLX vision model |

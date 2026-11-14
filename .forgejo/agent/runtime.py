@@ -6,7 +6,7 @@ from pathlib import Path
 import signal
 import subprocess
 
-MODELS = ("incoai/Qwen3.8-27B-Splash",)
+MODELS = ("Qwen3.8-27B-Splash",)
 
 
 def binding(title, body, base):

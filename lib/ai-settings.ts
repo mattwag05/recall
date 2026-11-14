@@ -1,5 +1,5 @@
 export const AI_PROVIDER_OPTIONS = [
-  { id: 'splash', label: 'Splash', defaultBaseUrl: 'http://127.0.0.1:8001/v1', defaultModel: 'incoai/Qwen3.8-27B-Splash', keyRequired: true },
+  { id: 'splash', label: 'Splash (oMLX)', defaultBaseUrl: 'http://127.0.0.1:8000/v1', defaultModel: 'Qwen3.8-27B-Splash', keyRequired: true },
   { id: 'ollama', label: 'Ollama', defaultBaseUrl: 'http://127.0.0.1:11434/v1', defaultModel: 'gemma4:latest', keyRequired: false },
   { id: 'lmstudio', label: 'LM Studio', defaultBaseUrl: 'http://127.0.0.1:1234/v1', defaultModel: 'local-model', keyRequired: false },
   { id: 'omlx', label: 'oMLX', defaultBaseUrl: 'http://localhost:8000/v1', defaultModel: 'MiniCPM-V-4.6-4bit', keyRequired: true },
