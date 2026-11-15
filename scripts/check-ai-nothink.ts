@@ -44,6 +44,8 @@ for (const option of AI_PROVIDER_OPTIONS) {
 }
 
 assert.deepEqual(NO_THINK_PARAMS.custom, {}, 'custom endpoints must not receive reasoning params')
+// reasoning.exclude only hides reasoning; tokens still burn max_tokens.
+assert.deepEqual(NO_THINK_PARAMS.openrouter, { reasoning: { effort: 'none' } }, 'openrouter must disable reasoning, not just hide it')
 
 // Truncation detection: finish_reason "length" must throw, never return the partial body.
 const ctx = { fn: 'llmChat', maxTokens: 64, provider: 'custom', model: 'm', stage: 's' }

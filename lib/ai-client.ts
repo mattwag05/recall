@@ -71,7 +71,9 @@ export async function getModel(stage: string): Promise<string> {
  * nothing and reasoning models burned max_tokens on CoT — recall-mok).
  *
  *   - ollama:   Ollama's OpenAI-compat layer honors reasoning_effort.
- *   - openrouter: OpenRouter's documented way to exclude reasoning tokens.
+ *   - openrouter: effort "none" disables reasoning. reasoning.exclude only
+ *     hides it; the tokens still count against max_tokens. Models whose
+ *     reasoning is mandatory reject "none" with a 400, which is loud.
  *   - lmstudio: honors reasoning_effort and ignores it for non-reasoning models.
  *   - custom: an arbitrary OpenAI-compatible endpoint. Strict servers (OpenAI
  *     itself) reject reasoning_effort for non-reasoning models with a 400, so
@@ -83,7 +85,7 @@ export const NO_THINK_PARAMS: Record<AiProvider, Record<string, unknown>> = {
   ollama: { reasoning_effort: 'none' },
   lmstudio: { reasoning_effort: 'none' },
   omlx: {},
-  openrouter: { reasoning: { exclude: true } },
+  openrouter: { reasoning: { effort: 'none' } },
   custom: {},
 }
 
