@@ -9,3 +9,5 @@ This guide moved. The one coding workflow for Claude, Codex, Pi, and Hermes is t
 Each project's own instruction file and bindings name its tracker, default branch, canonical remote, and verification commands. Neither those bindings nor this pointer grant push, PR, merge, or deploy authority.
 
 The opt-in background coding driver (`.forgejo/agent/driver.py`) feeds the reviewed copy of `LOOP.md` and the core skills recorded in the runner's skills manifest, not this file. See the shared-workflows [README](https://forgejo.tail6e035b.ts.net/matthewwagner/shared-workflows/src/branch/main/README.md).
+
+Pilot results and proposed changes to the loop and skills are recorded in mw-plugins-private `docs/plans/` (the core standard of 2026-11-14 and the phase 7 pilot findings). An agent's branch is a draft until a human-side `review`, and a deploy is accepted by a real request against the live configuration, not the defaults in code.
