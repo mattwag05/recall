@@ -33,7 +33,7 @@ def main():
             red = subprocess.run(argv, capture_output=True, timeout=30)
             if red.returncode == 0 or b"AssertionError" not in red.stderr:
                 raise RuntimeError("Fixture did not fail for its intended assertion")
-            infer("Synthetic coding qualification in this disposable directory only. Read installed tdd, unslop, and session-closeout skills. Fix calculator.add to add two numbers. Run the existing unittest and verify red to green. Do not commit, publish, access credentials, or change the test. There is no issue tracker or project documentation to update. Keep the response concise.", {"model": MODELS[0], "inferenceTimeoutSeconds": 480}, True)
+            infer("Synthetic coding qualification in this disposable directory only. Read the installed tdd skill. Fix calculator.add to add two numbers. Run the existing unittest and verify red to green. Do not commit, publish, access credentials, or change the test. There is no issue tracker or project documentation to update. Keep the response concise.", {"model": MODELS[0], "inferenceTimeoutSeconds": 480}, True)
             if Path("test_calculator.py").read_text() != test:
                 raise RuntimeError("Qualification test was modified")
             green = subprocess.run(argv, capture_output=True, timeout=30)
