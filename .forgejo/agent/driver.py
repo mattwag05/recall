@@ -188,7 +188,8 @@ def main():
             env=child_env(home), timeout=300)
     git("-c", "user.name=pi-agent", "-c", "user.email=pi-agent@noreply.local", "-c", "commit.gpgsign=false", "commit", "-m", f"fix: implement issue #{number}")
     default = event["repository"]["default_branch"]
-    git("fetch", "origin", default)
+    # The checkout keeps no credential, and the forge refuses anonymous reads.
+    git("-c", "credential.helper=", "-c", "credential.helper=" + TOKEN_HELPER, "fetch", "origin", default)
     if git("rev-parse", "FETCH_HEAD") != base:
         raise RuntimeError("Default branch moved; publication refused")
     web = os.environ["FORGEJO_API"].rstrip("/").removesuffix("/api/v1")
