@@ -217,6 +217,7 @@ The deploy directory `~/Projects/recall` on pironman is a plain git clone of
 ```sh
 cd ~/Projects/recall
 git pull
+docker tag recall-recall:latest recall-recall:rollback   # keep the running image; build retags latest
 docker compose -f docker-compose.deploy.yml build     # must succeed before the next line
 docker compose -f docker-compose.deploy.yml up -d --force-recreate
 ```
@@ -228,9 +229,17 @@ successful deploy of code that never shipped.
 Before pulling, note the deployed commit (`git rev-parse HEAD`) and take a
 consistent database copy: `sudo -n sqlite3 /mnt/storage/appdata/recall/data/recall.db
 ".backup <dir>/recall.db"`, then check it with `PRAGMA integrity_check`. A raw
-file copy of a running SQLite database is not a backup. The build does not keep
-the previous image, so rolling back means checking out the noted commit and
-running the same build and `up` steps.
+file copy of a running SQLite database is not a backup. The `docker tag` step
+above is what keeps the previous image (`build` moves `latest`, so tag first).
+To roll back, retag and recreate, with no rebuild:
+
+```sh
+docker tag recall-recall:rollback recall-recall:latest
+docker compose -f docker-compose.deploy.yml up -d --force-recreate --no-build
+```
+
+Also `git checkout` the noted commit so the clone matches the running image. A
+schema change is not undone by this: restore the database backup too.
 
 The LLM provider, model and key come from the `Setting` table (the settings
 page), which overrides the compose environment. Check it before judging a
@@ -240,7 +249,10 @@ The database lives outside the clone at `/mnt/storage/appdata/recall/data`
 (bind-mounted to `/data`), so it survives rebuilds. Ordinary boots never change
 the schema: the deploy compose runs `node server.js`, and
 `scripts/start-production.sh` pushes the schema only when `RECALL_APPLY_SCHEMA=1`.
-See `docs/schema-deployment.md` before any schema change.
+See `docs/schema-deployment.md` before any schema change. With
+`RECALL_APPLY_SCHEMA=1` the script first drops the derived `bookmark_fts` index
+(`scripts/drop-fts.cjs`), because Prisma cannot push over the FTS5 tables; the
+index rebuilds on the first search.
 
 Everything gitignored in the deploy dir (`data/`, `dist-app/`) is local
 scratch; nothing there needs preserving across a re-clone.
