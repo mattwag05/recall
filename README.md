@@ -261,6 +261,17 @@ triaged one at a time: `n`/`→` next, `p`/`←` previous, `r` reviewed, `s` pin
 from the palette, shortcuts only fire from the passive page surface — never
 while focus is inside links, buttons, selects, or editable fields.
 
+### Verification
+
+Run the four checks before automated publication. Each must succeed.
+
+```bash
+npm test
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
 ### LLM backend
 
 Configured via `.env` (see `.env` in the repo root):
