@@ -1,4 +1,4 @@
-import { llmVision } from './ai-client'
+import { LlmTruncatedError, llmVision } from './ai-client'
 import { formatBytes } from './format'
 
 export const MAX_CHAT_IMAGE_BYTES = 1024 * 1024
@@ -89,6 +89,10 @@ async function extractImageText(
       maxTokens: 900,
     })
   } catch (err) {
+    if (err instanceof LlmTruncatedError) {
+      // The model answered; the image just produced more text than the budget.
+      throw new ImageVisionError(`${name} produced more OCR/vision text than the model's output limit.`, 422)
+    }
     throw new ImageVisionError(
       `Image OCR/vision is unavailable from the local model: ${String(err)}`,
       503,

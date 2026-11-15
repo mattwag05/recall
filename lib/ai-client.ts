@@ -72,8 +72,10 @@ export async function getModel(stage: string): Promise<string> {
  *
  *   - ollama:   Ollama's OpenAI-compat layer honors reasoning_effort.
  *   - openrouter: OpenRouter's documented way to exclude reasoning tokens.
- *   - lmstudio / custom: OpenAI-compatible servers; reasoning_effort is the
- *     standard suppression param and is ignored by non-reasoning models.
+ *   - lmstudio: honors reasoning_effort and ignores it for non-reasoning models.
+ *   - custom: an arbitrary OpenAI-compatible endpoint. Strict servers (OpenAI
+ *     itself) reject reasoning_effort for non-reasoning models with a 400, so
+ *     send nothing and rely on the truncation check in completionText().
  *   - splash / omlx: local engines that are not reasoning models.
  */
 export const NO_THINK_PARAMS: Record<AiProvider, Record<string, unknown>> = {
@@ -82,7 +84,7 @@ export const NO_THINK_PARAMS: Record<AiProvider, Record<string, unknown>> = {
   lmstudio: { reasoning_effort: 'none' },
   omlx: {},
   openrouter: { reasoning: { exclude: true } },
-  custom: { reasoning_effort: 'none' },
+  custom: {},
 }
 
 /** Extra request params that disable the model's chain-of-thought. */
@@ -96,6 +98,34 @@ export function stripThinking(s: string): string {
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/^\s*Thinking Process:[\s\S]*?(?=(\[|\{|#|$))/i, '')
     .trim()
+}
+
+/** Thrown when the model hit max_tokens (finish_reason "length"). */
+export class LlmTruncatedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'LlmTruncatedError'
+  }
+}
+
+/**
+ * Cleaned content of the first choice. Throws LlmTruncatedError on
+ * finish_reason "length" so a cut-off reply is never returned as if complete.
+ */
+export function completionText(
+  resp: unknown,
+  ctx: { fn: string; maxTokens: number; provider: string; model: string; stage: string },
+): string {
+  const choice = (resp as { choices?: Array<{ message?: { content?: string | null }; finish_reason?: string }> })
+    .choices?.[0]
+  if (choice?.finish_reason === 'length') {
+    throw new LlmTruncatedError(
+      `${ctx.fn}: response truncated at max_tokens=${ctx.maxTokens} ` +
+      `(provider=${ctx.provider}, model=${ctx.model}, stage=${ctx.stage}). ` +
+      'Raise maxTokens or shrink the request; the partial body was discarded.',
+    )
+  }
+  return stripThinking(choice?.message?.content ?? '')
 }
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -137,16 +167,7 @@ export async function llmChat(messages: ChatMessage[], opts: LlmChatOpts = {}): 
     timeout: settings.requestTimeoutMs,
   })
 
-  const choice = (resp as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> })
-    .choices?.[0]
-  if (choice?.finish_reason === 'length') {
-    throw new Error(
-      `llmChat: response truncated at max_tokens=${opts.maxTokens ?? 1024} ` +
-      `(provider=${settings.provider}, model=${model}, stage=${opts.stage ?? 'default'}). ` +
-      'Raise maxTokens or shrink the request; the partial body was discarded.',
-    )
-  }
-  return stripThinking(choice?.message?.content ?? '')
+  return completionText(resp, { fn: 'llmChat', maxTokens: opts.maxTokens ?? 1024, provider: settings.provider, model, stage: opts.stage ?? 'default' })
 }
 
 export async function llmVision(
@@ -177,16 +198,7 @@ export async function llmVision(
     timeout: settings.requestTimeoutMs,
   })
 
-  const choice = (resp as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> })
-    .choices?.[0]
-  if (choice?.finish_reason === 'length') {
-    throw new Error(
-      `llmVision: response truncated at max_tokens=${opts.maxTokens ?? 900} ` +
-      `(provider=${settings.provider}, model=${model}, stage=${opts.stage ?? 'vision'}). ` +
-      'Raise maxTokens or shrink the request; the partial body was discarded.',
-    )
-  }
-  return stripThinking(choice?.message?.content ?? '')
+  return completionText(resp, { fn: 'llmVision', maxTokens: opts.maxTokens ?? 900, provider: settings.provider, model, stage: opts.stage ?? 'vision' })
 }
 
 export async function getRuntimeLlmSettings(): Promise<RuntimeLlmSettings> {

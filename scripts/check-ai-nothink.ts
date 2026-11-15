@@ -2,12 +2,9 @@ import assert from 'node:assert/strict'
 import { AI_PROVIDER_OPTIONS, type AiProvider } from '../lib/ai-settings'
 
 // recall-mok: every provider in AI_PROVIDER_OPTIONS must have an explicit
-// no-think entry. The table lives in lib/ai-client.ts, which pulls in Prisma
-// and the OpenAI client, so this check re-derives the same mapping and asserts
-// it matches the table byte-for-byte. If the two drift, a provider can silently
-// send no reasoning suppression and batched JSON stages truncate again.
-
-import { NO_THINK_PARAMS } from '../lib/ai-client'
+// no-think entry, and a truncated completion must throw instead of returning
+// a partial body that batched JSON stages would silently mis-parse.
+import { LlmTruncatedError, NO_THINK_PARAMS, completionText } from '../lib/ai-client'
 
 // The table must cover every provider option with no gaps.
 for (const option of AI_PROVIDER_OPTIONS) {
@@ -31,7 +28,8 @@ const mustSuppress: Record<AiProvider, boolean> = {
   lmstudio: true,
   omlx: false,
   openrouter: true,
-  custom: true,
+  // custom is an arbitrary endpoint; strict servers 400 on reasoning_effort.
+  custom: false,
 }
 for (const option of AI_PROVIDER_OPTIONS) {
   const extra = NO_THINK_PARAMS[option.id]
@@ -44,5 +42,18 @@ for (const option of AI_PROVIDER_OPTIONS) {
     )
   }
 }
+
+assert.deepEqual(NO_THINK_PARAMS.custom, {}, 'custom endpoints must not receive reasoning params')
+
+// Truncation detection: finish_reason "length" must throw, never return the partial body.
+const ctx = { fn: 'llmChat', maxTokens: 64, provider: 'custom', model: 'm', stage: 's' }
+const reply = (content: string | null, finish_reason: string) => ({ choices: [{ message: { content }, finish_reason }] })
+assert.equal(completionText(reply('<think>x</think>{"ok":1}', 'stop'), ctx), '{"ok":1}')
+assert.equal(completionText(reply(null, 'stop'), ctx), '')
+assert.equal(completionText({}, ctx), '')
+assert.throws(
+  () => completionText(reply('{"tags": ["a", "b', 'length'), ctx),
+  (err: unknown) => err instanceof LlmTruncatedError && /max_tokens=64/.test(err.message),
+)
 
 console.log('ai no-think params ok')
