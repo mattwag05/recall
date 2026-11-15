@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 
@@ -28,7 +29,9 @@ def run(args, *, env=None, timeout=600):
         process.communicate()
         raise RuntimeError("Command timed out; no automatic retry")
     if process.returncode:
-        raise RuntimeError(f"Command failed with exit {process.returncode}: {args[0]}")
+        # Remote URLs in git stderr can carry userinfo (user:token@host); drop it before surfacing.
+        detail = re.sub(r"(\w+://)[^/\s@]*@", r"\1***@", err.strip())[-500:]
+        raise RuntimeError(f"Command failed with exit {process.returncode}: {args[0]}" + (f": {detail}" if detail else ""))
     return out.strip()
 
 
