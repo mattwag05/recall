@@ -225,11 +225,22 @@ Run the build as its own step and check it. If the build fails, `up -d` will
 happily recreate the container from the previous image, which looks like a
 successful deploy of code that never shipped.
 
+Before pulling, note the deployed commit (`git rev-parse HEAD`) and take a
+consistent database copy: `sudo -n sqlite3 /mnt/storage/appdata/recall/data/recall.db
+".backup <dir>/recall.db"`, then check it with `PRAGMA integrity_check`. A raw
+file copy of a running SQLite database is not a backup. The build does not keep
+the previous image, so rolling back means checking out the noted commit and
+running the same build and `up` steps.
+
+The LLM provider, model and key come from the `Setting` table (the settings
+page), which overrides the compose environment. Check it before judging a
+provider-specific change.
+
 The database lives outside the clone at `/mnt/storage/appdata/recall/data`
-(bind-mounted to `/data`), so it survives rebuilds. `scripts/start-production.sh`
-applies the Prisma schema on every boot — see the comments there before
-changing it; both obvious "simplifications" of that file have already broken
-production once each.
+(bind-mounted to `/data`), so it survives rebuilds. Ordinary boots never change
+the schema: the deploy compose runs `node server.js`, and
+`scripts/start-production.sh` pushes the schema only when `RECALL_APPLY_SCHEMA=1`.
+See `docs/schema-deployment.md` before any schema change.
 
 Everything gitignored in the deploy dir (`data/`, `dist-app/`) is local
 scratch; nothing there needs preserving across a re-clone.
