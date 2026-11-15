@@ -10,18 +10,10 @@ import { normalizeAiProvider, providerDefaults, providerNeedsKey, type AiProvide
  *   - "omlx"   → local vision server
  *   - "ollama" → Ollama OpenAI-compatible server (fallback)
  *
- * We disable Ollama reasoning so structured JSON stages do not burn the token
- * budget on a hidden reasoning pass:
- *   - Ollama (gemma4): reasoning_effort = "none"
- *
- * ⚠️ Known gap (recall-mok): AI_PROVIDER_OPTIONS also offers openrouter,
- * lmstudio and custom, and noThinkExtra() sends nothing for those. A reasoning
- * model behind one of them spends max_tokens on chain-of-thought and the reply
- * is cut off mid-JSON — which llmChat cannot see, because it never checks
- * finish_reason. Batched callers (categorizer, semantic-tagger) then swallow
- * the parse error and fall back for the whole batch, so the damage looks like
- * successful-but-wrong enrichment rather than an error. Raise maxTokens if you
- * add a batched JSON stage before that bug is fixed.
+ * We disable reasoning per provider so structured JSON stages do not burn the
+ * token budget on a hidden chain-of-thought pass (see NO_THINK_PARAMS below).
+ * llmChat also fails loudly when the response is truncated (finish_reason
+ * "length") instead of returning a partial body.
  */
 
 const SPLASH_BASE = process.env.SPLASH_BASE_URL || 'http://127.0.0.1:8000/v1'
@@ -72,11 +64,32 @@ export async function getModel(stage: string): Promise<string> {
   return (await getRuntimeLlmSettings()).model
 }
 
+/**
+ * Per-provider params that suppress chain-of-thought. Driven off a table keyed
+ * by every id in AI_PROVIDER_OPTIONS so a new provider cannot silently miss it
+ * (the old if-chain only covered ollama; openrouter/lmstudio/custom sent
+ * nothing and reasoning models burned max_tokens on CoT — recall-mok).
+ *
+ *   - ollama:   Ollama's OpenAI-compat layer honors reasoning_effort.
+ *   - openrouter: OpenRouter's documented way to exclude reasoning tokens.
+ *   - lmstudio: honors reasoning_effort and ignores it for non-reasoning models.
+ *   - custom: an arbitrary OpenAI-compatible endpoint. Strict servers (OpenAI
+ *     itself) reject reasoning_effort for non-reasoning models with a 400, so
+ *     send nothing and rely on the truncation check in completionText().
+ *   - splash / omlx: local engines that are not reasoning models.
+ */
+export const NO_THINK_PARAMS: Record<AiProvider, Record<string, unknown>> = {
+  splash: {},
+  ollama: { reasoning_effort: 'none' },
+  lmstudio: { reasoning_effort: 'none' },
+  omlx: {},
+  openrouter: { reasoning: { exclude: true } },
+  custom: {},
+}
+
 /** Extra request params that disable the model's chain-of-thought. */
 function noThinkExtra(provider: AiProvider): Record<string, unknown> {
-  return provider === 'ollama'
-    ? { reasoning_effort: 'none' }
-    : {}
+  return NO_THINK_PARAMS[provider] ?? {}
 }
 
 /** Defensive strip of any reasoning that still leaks into content. */
@@ -85,6 +98,34 @@ export function stripThinking(s: string): string {
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/^\s*Thinking Process:[\s\S]*?(?=(\[|\{|#|$))/i, '')
     .trim()
+}
+
+/** Thrown when the model hit max_tokens (finish_reason "length"). */
+export class LlmTruncatedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'LlmTruncatedError'
+  }
+}
+
+/**
+ * Cleaned content of the first choice. Throws LlmTruncatedError on
+ * finish_reason "length" so a cut-off reply is never returned as if complete.
+ */
+export function completionText(
+  resp: unknown,
+  ctx: { fn: string; maxTokens: number; provider: string; model: string; stage: string },
+): string {
+  const choice = (resp as { choices?: Array<{ message?: { content?: string | null }; finish_reason?: string }> })
+    .choices?.[0]
+  if (choice?.finish_reason === 'length') {
+    throw new LlmTruncatedError(
+      `${ctx.fn}: response truncated at max_tokens=${ctx.maxTokens} ` +
+      `(provider=${ctx.provider}, model=${ctx.model}, stage=${ctx.stage}). ` +
+      'Raise maxTokens or shrink the request; the partial body was discarded.',
+    )
+  }
+  return stripThinking(choice?.message?.content ?? '')
 }
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -100,6 +141,11 @@ export interface LlmChatOpts {
 /**
  * Single entry point for chat completions. Injects the no-think param for the
  * active provider and returns cleaned content text.
+ *
+ * Throws when the response is truncated (finish_reason "length") so callers
+ * can distinguish a cut-off reply from a short one. Batched JSON stages
+ * (categorizer, semantic-tagger) catch this and fall back per batch instead of
+ * silently enriching with a partial body — recall-mok.
  */
 export async function llmChat(messages: ChatMessage[], opts: LlmChatOpts = {}): Promise<string> {
   const settings = await getRuntimeLlmSettings()
@@ -115,14 +161,13 @@ export async function llmChat(messages: ChatMessage[], opts: LlmChatOpts = {}): 
     temperature: opts.temperature ?? 0.2,
     max_tokens: opts.maxTokens ?? 1024,
     ...noThinkExtra(settings.provider),
-    // chat_template_kwargs is not in the OpenAI type but local OpenAI-compatible servers honor it.
+    // reasoning / chat_template_kwargs are not in the OpenAI type but
+    // OpenRouter and local OpenAI-compatible servers honor them.
   } as unknown as Parameters<typeof client.chat.completions.create>[0], {
     timeout: settings.requestTimeoutMs,
   })
 
-  const content = (resp as { choices?: Array<{ message?: { content?: string } }> })
-    .choices?.[0]?.message?.content ?? ''
-  return stripThinking(content)
+  return completionText(resp, { fn: 'llmChat', maxTokens: opts.maxTokens ?? 1024, provider: settings.provider, model, stage: opts.stage ?? 'default' })
 }
 
 export async function llmVision(
@@ -153,9 +198,7 @@ export async function llmVision(
     timeout: settings.requestTimeoutMs,
   })
 
-  const content = (resp as { choices?: Array<{ message?: { content?: string } }> })
-    .choices?.[0]?.message?.content ?? ''
-  return stripThinking(content)
+  return completionText(resp, { fn: 'llmVision', maxTokens: opts.maxTokens ?? 900, provider: settings.provider, model, stage: opts.stage ?? 'vision' })
 }
 
 export async function getRuntimeLlmSettings(): Promise<RuntimeLlmSettings> {
