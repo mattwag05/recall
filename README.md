@@ -226,6 +226,19 @@ Run the build as its own step and check it. If the build fails, `up -d` will
 happily recreate the container from the previous image, which looks like a
 successful deploy of code that never shipped.
 
+After `up -d` returns, confirm the new instance answers a chat probe. The
+deploy compose binds `127.0.0.1:3011`, and the body accepts `prompt`,
+`scope`, `cardIds`, and `includeSemantic`:
+
+```sh
+curl -s http://127.0.0.1:3011/api/chat \
+  -X POST -H 'Content-Type: application/json' \
+  -d '{"prompt": "Summarize my library", "scope": "global", "cardIds": [], "includeSemantic": true}'
+```
+
+Expect HTTP 200 with `ok: true` and a non-empty `answer`. The probe saves a
+short chat thread; if it fails, use the rollback below.
+
 Before pulling, note the deployed commit (`git rev-parse HEAD`) and take a
 consistent database copy: `sudo -n sqlite3 /mnt/storage/appdata/recall/data/recall.db
 ".backup <dir>/recall.db"`, then check it with `PRAGMA integrity_check`. A raw
