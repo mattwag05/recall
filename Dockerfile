@@ -39,6 +39,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/scripts/start-production.sh ./scripts/start-production.sh
+COPY --from=builder /app/scripts/drop-fts.cjs ./scripts/drop-fts.cjs
 
 EXPOSE 3000
 
