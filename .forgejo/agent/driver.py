@@ -30,6 +30,24 @@ def skill_files(skill_md):
     return {str(Path(d) / f) for d, _, files in os.walk(root, followlinks=True) for f in files}
 
 
+# Pi skips a skill whose frontmatter its YAML parser rejects, with only a warning. Ask Pi's own loader.
+PI_SKILL_CHECK = ("const {loadSkills} = await import(process.argv[1]);"
+    "const r = loadSkills({cwd: process.cwd(), skillPaths: process.argv.slice(2), includeDefaults: false});"
+    "console.log(JSON.stringify({loaded: r.skills.map(s => s.filePath),"
+    " errors: r.diagnostics.map(d => [d.path, String(d.message).split('\\n')[0]])}));")
+
+
+def check_pi_loads(skills, home):
+    entry = Path(os.environ["PI_BIN"]).resolve().parents[1] / "dist/index.js"
+    result = json.loads(run(["node", "--input-type=module", "-e", PI_SKILL_CHECK, str(entry), *skills],
+                            env=child_env(home), timeout=60))
+    missing = [p for p in skills if p not in result["loaded"]]
+    if missing:
+        reasons = {p: m for p, m in result["errors"]}
+        raise RuntimeError("Pi did not load skills: " + "; ".join(
+            f"{Path(p).parent.name} ({reasons.get(p, 'no diagnostic')})" for p in missing))
+
+
 def git(*args):
     return run(["git", *args])
 
@@ -60,6 +78,7 @@ def infer(prompt, config, implement):
     with tempfile.TemporaryDirectory(prefix="forgejo-pi-") as home:
         profile = Path(home) / ".pi/agent"
         profile.mkdir(parents=True)
+        check_pi_loads(skills, home)
         models = [{"id": m, "name": m, "input": ["text"], "reasoning": False,
                    "contextWindow": 128000, "maxTokens": 16384,
                    "samplingParams": {"temperature": 0.7, "top_p": 0.8,
