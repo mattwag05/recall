@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 import tempfile
 import urllib.request
-from runtime import MODELS, binding, child_env, run, safe_paths
+from runtime import MODELS, QWEN_SAMPLING, binding, child_env, run, safe_paths
 
 # The reviewed core skills (mw-plugins plugins/core/skills); the manifest must list exactly these.
 CORE_SKILLS = {"closeout", "debug", "grill", "handoff", "ops-change", "plan", "research",
@@ -80,11 +80,8 @@ def infer(prompt, config, implement):
         profile.mkdir(parents=True)
         check_pi_loads(skills, home)
         models = [{"id": m, "name": m, "input": ["text"], "reasoning": False,
-                   "contextWindow": 128000, "maxTokens": 16384,
-                   "samplingParams": {"temperature": 0.7, "top_p": 0.8,
-                                      "top_k": 20, "min_p": 0.0,
-                                      "repetition_penalty": 1.0,
-                                      "chat_template_kwargs": {"enable_thinking": False}},
+                   "contextWindow": 128000, "maxTokens": 16384,  # 128K: the Splash fallback's window
+                   **({"samplingParams": QWEN_SAMPLING} if "Qwen" in m else {}),
                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}} for m in MODELS]
         cfg = {"providers": {"local": {"baseUrl": os.environ["LLM_BASE"],
             "apiKey": os.environ["LLM_KEY"], "api": "openai-completions", "authHeader": True,
