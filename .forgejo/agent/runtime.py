@@ -7,7 +7,10 @@ import re
 import signal
 import subprocess
 
-MODELS = ("Qwen3.8-27B-Splash",)
+# Cloud first (2026-11-15): Manifest harness `pi` routes `auto` to glm-5.3 and falls back to Splash itself.
+MODELS = ("auto", "Qwen3.8-27B-Splash")
+QWEN_SAMPLING = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "min_p": 0.0,
+                 "repetition_penalty": 1.0, "chat_template_kwargs": {"enable_thinking": False}}
 
 
 def binding(title, body, base):
